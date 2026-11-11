@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0e1319">
+<title>Buque Checking</title>
+<script>
+(function () {
+  function caja(t) {
+    var d = document.getElementById('errbox');
+    if (!d) {
+      d = document.createElement('div');
+      d.id = 'errbox';
+      d.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#c62828;color:#fff;font:13px sans-serif;padding:10px;white-space:pre-wrap';
+      (document.body || document.documentElement).appendChild(d);
+    }
+    d.textContent = t;
+  }
+  window.addEventListener('error', function (e) {
+    caja('Error: ' + e.message + ' (línea ' + e.lineno + ')');
+  });
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      if (window.__appListo !== true) caja('app.js no arrancó: el archivo puede estar dañado o incompleto');
+    }, 1000);
+  });
+})();
+</script>
+<link rel="stylesheet" href="./css/styles.css">
+<script src="./js/html2pdf.js" defer></script>
+<script src="./js/native-bridge.js" defer></script>
+<script src="./js/app.js" defer></script>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="ttl" class="ttl" type="button">Buque</button>
+    <div id="cnt" class="cnt"></div>
+  </header>
+  <div id="bays" class="bays"></div>
+  <div id="tools" class="tools"></div>
+  <main id="main"><div id="grid"></div><div id="res" hidden></div></main>
+  <nav>
+    <button type="button" data-tab="imp" class="on">Descarga</button>
+    <button type="button" data-tab="exp">Carga</button>
+    <button type="button" data-tab="res">Resumen</button>
+  </nav>
+</div>
+<div id="modal" class="modal" hidden></div>
+<div id="toast" class="toast" hidden></div>
+<div id="pdfbox" class="pdfbox"></div>
+<input type="file" id="file" accept=".json,application/json" hidden>
+</body>
+</html>

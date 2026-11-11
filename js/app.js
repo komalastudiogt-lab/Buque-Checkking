@@ -4,7 +4,7 @@
   var CHK = '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 12l5 5L20 6" fill="none" stroke="currentColor" stroke-width="3"/></svg>';
   var DEF = { rows: 11, on: 5, un: 6 };
   var S = defaults();
-  var tab = 'imp', mode = 'cap', bay = null, sel = '', tt = null;
+  var tab = 'cap', bay = null, sel = '', tt = null;
 
   function mkShip(name) {
     return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {} };
@@ -177,14 +177,13 @@
     return h + '<button type="button" class="chip add" data-addcode="1">+ Código</button></div>';
   }
   function renderTools() {
-    var h = '';
-    if (tab === 'imp') {
-      h += '<div class="seg"><button type="button" data-mode="cap" class="' + (mode === 'cap' ? 'on' : '') + '">Capturar plan</button>' +
-        '<button type="button" data-mode="des" class="' + (mode === 'des' ? 'on' : '') + '">Descargar</button></div>';
-      if (mode === 'cap') h += palette(true) + '<p class="hint">Elige un código y toca las celdas del plan.</p>';
-      else h += '<p class="hint">Toca un contenedor para marcarlo descargado. Tócalo otra vez para deshacer.</p>';
+    var h = '', c = count(bay || null);
+    if (tab === 'cap') {
+      h = '<p class="step">Paso 1: captura el plano</p>' + palette(true) + '<p class="hint">Elige un código y toca las celdas. Toca una celda del mismo código para quitarla.</p>';
+    } else if (tab === 'des') {
+      h = '<p class="step">Paso 2: descarga</p><p class="hint">Toca un contenedor para marcarlo descargado. Tócalo otra vez para deshacer. Pendientes en esta bahía: <b>' + (c.p - c.d) + '</b></p>';
     } else {
-      h += palette(false) + '<p class="hint">Toca la celda donde cargaste. Tócala otra vez para quitarla.</p>';
+      h = '<p class="step">Paso 3: carga</p>' + palette(false) + '<p class="hint">Elige el código y toca la celda donde cargaste. Atenuadas: siguen ocupadas. Punteadas: espacio liberado.</p>';
     }
     $('tools').innerHTML = h;
   }
@@ -205,9 +204,16 @@
         h += '<div class="lb">' + t + '</div>';
         for (i = 0; i < R.length; i++) {
           k = bay + '|' + R[i] + '|' + t;
-          v = tab === 'imp' ? sh.imp[k] : sh.exp[k];
-          if (!v) { h += '<button type="button" class="c" data-k="' + k + '"></button>'; continue; }
-          if (tab === 'imp' && sh.done[k]) {
+          v = tab === 'exp' ? sh.exp[k] : sh.imp[k];
+          if (!v) {
+            var oc = tab === 'exp' && sh.imp[k], cl = 'c';
+            if (oc && sh.done[k]) cl += ' fr';
+            if (oc && !sh.done[k]) {
+              h += '<button type="button" class="c oc" style="color:' + col(sh.imp[k]) + '" data-k="' + k + '">' + esc(sh.imp[k]) + '</button>';
+            } else h += '<button type="button" class="' + cl + '" data-k="' + k + '"></button>';
+            continue;
+          }
+          if (tab !== 'exp' && sh.done[k]) {
             h += '<button type="button" class="c dn" style="border-color:' + col(v) + ';color:' + col(v) + '" data-k="' + k + '">' + CHK + '</button>';
           } else {
             h += '<button type="button" class="c" style="background:' + col(v) + ';border-color:' + col(v) + '" data-k="' + k + '">' + esc(v) + '</button>';
@@ -248,12 +254,12 @@
   /* ---------- Acciones ---------- */
   function tapCell(k) {
     var sh = SH();
-    if (tab === 'imp') {
-      if (mode === 'cap') {
-        if (!sel || sh.imp[k] === sel) { delete sh.imp[k]; delete sh.done[k]; }
-        else sh.imp[k] = sel;
-        vib('suave');
-      } else if (sh.imp[k]) {
+    if (tab === 'cap') {
+      if (!sel || sh.imp[k] === sel) { delete sh.imp[k]; delete sh.done[k]; }
+      else sh.imp[k] = sel;
+      vib('suave');
+    } else if (tab === 'des') {
+      if (sh.imp[k]) {
         if (sh.done[k]) { delete sh.done[k]; vib('aviso'); } else { sh.done[k] = 1; vib('exito'); }
       } else { vib('aviso'); return; }
     } else {
@@ -470,13 +476,12 @@
     if ((el = up(e.target, 'data-k'))) { tapCell(el.getAttribute('data-k')); return; }
     if ((el = up(e.target, 'data-tab'))) {
       tab = el.getAttribute('data-tab');
-      if (tab === 'exp' && !sel) sel = S.codes[0].c;
+      if (tab !== 'cap' && !sel) sel = S.codes[0].c;
       render(); return;
     }
     if ((el = up(e.target, 'data-bay'))) { bay = el.getAttribute('data-bay'); render(); return; }
     if (up(e.target, 'data-addbay')) { addBay(); return; }
     if (up(e.target, 'data-editcells')) { editCells(); return; }
-    if ((el = up(e.target, 'data-mode'))) { mode = el.getAttribute('data-mode'); render(); return; }
     if ((el = up(e.target, 'data-code'))) { sel = el.getAttribute('data-code'); render(); return; }
     if (up(e.target, 'data-addcode')) { addCode(); return; }
     if (up(e.target, 'data-delbay')) {

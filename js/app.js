@@ -1,16 +1,18 @@
 (function () {
   var P = 'bchk_';
-  var ROWS = ['10', '08', '06', '04', '02', '00', '01', '03', '05', '07', '09'];
-  var ON = ['90', '88', '86', '84', '82'];
-  var UN = ['12', '10', '08', '06', '04', '02'];
   var PRESET = ['#e0525a', '#3fa7d6', '#59c36a', '#f2a541', '#b57edc', '#2ec4b6', '#f06eaa', '#9aa5b1', '#c9b037', '#ff8a4c', '#7f9cff', '#a3d977'];
   var CHK = '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 12l5 5L20 6" fill="none" stroke="currentColor" stroke-width="3"/></svg>';
+  var DEF = { rows: 11, on: 5, un: 6 };
   var S = defaults();
   var tab = 'imp', mode = 'cap', bay = null, sel = '', tt = null;
 
+  function mkShip(name) {
+    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {} };
+  }
   function defaults() {
+    var sh = mkShip('Mi buque');
     return {
-      buque: 'Mi buque', bays: [], imp: {}, done: {}, exp: {}, vib: true,
+      ships: [sh], cur: sh.id, vib: true,
       codes: [
         { c: 'EH', color: '#e0525a' }, { c: 'HN', color: '#3fa7d6' }, { c: 'LN', color: '#59c36a' },
         { c: 'BO', color: '#f2a541' }, { c: 'LM', color: '#b57edc' }, { c: 'MI', color: '#2ec4b6' },
@@ -25,19 +27,56 @@
     });
   }
   function save() { try { localStorage.setItem(P + 'data', JSON.stringify(S)); } catch (e) {} }
+  function SH() {
+    for (var i = 0; i < S.ships.length; i++) { if (S.ships[i].id === S.cur) return S.ships[i]; }
+    return S.ships[0];
+  }
+  function bcfg(id) {
+    var b = SH().bays;
+    for (var i = 0; i < b.length; i++) { if (b[i].id === id) return b[i]; }
+    return null;
+  }
+  function sortBays() { SH().bays.sort(function (a, b) { return a.id.localeCompare(b.id, undefined, { numeric: true }); }); }
+  function pad(n) { return ('0' + n).slice(-2); }
+  function rowLabels(n) {
+    var odd = n % 2 === 1, e = odd ? (n - 1) / 2 : n / 2, r = [], i;
+    for (i = e; i >= 1; i--) r.push(pad(i * 2));
+    if (odd) r.push('00');
+    for (i = 0; i < e; i++) r.push(pad(i * 2 + 1));
+    return r;
+  }
+  function tierLabels(on, n) {
+    var r = [];
+    for (var i = n - 1; i >= 0; i--) r.push(pad(on ? 82 + 2 * i : 2 * (i + 1)));
+    return r;
+  }
+  function lim(v, a, b, d) { v = parseInt(v, 10); return isNaN(v) ? d : Math.max(a, Math.min(b, v)); }
+
+  /* ---------- Validación y migración ---------- */
   function valid(o) {
-    return o && typeof o === 'object' && Array.isArray(o.bays) && Array.isArray(o.codes) &&
-      o.imp && typeof o.imp === 'object' && o.exp && typeof o.exp === 'object';
+    return o && typeof o === 'object' && Array.isArray(o.codes) &&
+      (Array.isArray(o.ships) || (Array.isArray(o.bays) && o.imp && typeof o.imp === 'object' && o.exp && typeof o.exp === 'object'));
+  }
+  function normShip(x) {
+    var sh = mkShip(typeof x.name === 'string' && x.name ? x.name.slice(0, 40) : 'Buque');
+    if (typeof x.id === 'string' && /^[A-Za-z0-9]{1,20}$/.test(x.id)) sh.id = x.id;
+    var i, k, ids = [], bl = Array.isArray(x.bays) ? x.bays : [];
+    for (i = 0; i < bl.length; i++) {
+      var b = bl[i], id, rows = DEF.rows, on = DEF.on, un = DEF.un;
+      if (b && typeof b === 'object') { id = b.id; rows = lim(b.rows, 1, 16, DEF.rows); on = lim(b.on, 0, 8, DEF.on); un = lim(b.un, 0, 10, DEF.un); }
+      else id = b;
+      id = String(id).replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
+      if (id && ids.indexOf(id) < 0) { ids.push(id); sh.bays.push({ id: id, rows: rows, on: on, un: un }); }
+    }
+    var re = /^[A-Za-z0-9]{1,8}\|\d\d\|\d\d$/, im = x.imp || {}, dn = x.done || {}, ex = x.exp || {};
+    for (k in im) { if (re.test(k) && ids.indexOf(k.split('|')[0]) >= 0 && typeof im[k] === 'string') sh.imp[k] = im[k].slice(0, 4); }
+    for (k in dn) { if (sh.imp[k] && dn[k]) sh.done[k] = 1; }
+    for (k in ex) { if (re.test(k) && ids.indexOf(k.split('|')[0]) >= 0 && typeof ex[k] === 'string') sh.exp[k] = ex[k].slice(0, 4); }
+    return sh;
   }
   function norm(o) {
-    var r = defaults(), k, i;
-    r.buque = typeof o.buque === 'string' ? o.buque.slice(0, 40) : r.buque;
+    var r = defaults(), i;
     r.vib = o.vib !== false;
-    r.bays = [];
-    for (i = 0; i < o.bays.length; i++) {
-      var b = String(o.bays[i]).replace(/[^A-Za-z0-9]/g, '').slice(0, 6);
-      if (b && r.bays.indexOf(b) < 0) r.bays.push(b);
-    }
     var cs = [];
     for (i = 0; i < o.codes.length; i++) {
       var c = o.codes[i];
@@ -46,11 +85,16 @@
       }
     }
     if (cs.length) r.codes = cs;
-    var re = /^[A-Za-z0-9]{1,6}\|\d\d\|\d\d$/;
-    r.imp = {}; r.done = {}; r.exp = {};
-    for (k in o.imp) { if (re.test(k) && typeof o.imp[k] === 'string') r.imp[k] = o.imp[k].slice(0, 4); }
-    if (o.done && typeof o.done === 'object') { for (k in o.done) { if (r.imp[k] && o.done[k]) r.done[k] = 1; } }
-    for (k in o.exp) { if (re.test(k) && typeof o.exp[k] === 'string') r.exp[k] = o.exp[k].slice(0, 4); }
+    var list = Array.isArray(o.ships) ? o.ships : [{ name: o.buque, bays: o.bays, imp: o.imp, done: o.done, exp: o.exp }];
+    var seen = {};
+    r.ships = [];
+    for (i = 0; i < list.length; i++) {
+      var sh = normShip(list[i] || {});
+      while (seen[sh.id]) sh.id += 'x';
+      seen[sh.id] = 1; r.ships.push(sh);
+    }
+    if (!r.ships.length) r.ships = [mkShip('Mi buque')];
+    r.cur = (typeof o.cur === 'string' && seen[o.cur]) ? o.cur : r.ships[0].id;
     return r;
   }
   function load() {
@@ -58,17 +102,18 @@
       var t = localStorage.getItem(P + 'data');
       if (t) { var o = JSON.parse(t); if (valid(o)) S = norm(o); }
     } catch (e) {}
-    if (S.bays.length) bay = S.bays[0];
+    bay = SH().bays.length ? SH().bays[0].id : null;
     sel = S.codes[0].c;
+    save();
   }
   function col(c) {
     for (var i = 0; i < S.codes.length; i++) { if (S.codes[i].c === c) return S.codes[i].color; }
     return '#9aa5b1';
   }
   function count(b) {
-    var r = { p: 0, d: 0, l: 0 }, k;
-    for (k in S.imp) { if (!b || k.split('|')[0] === b) { r.p++; if (S.done[k]) r.d++; } }
-    for (k in S.exp) { if (!b || k.split('|')[0] === b) r.l++; }
+    var sh = SH(), r = { p: 0, d: 0, l: 0 }, k;
+    for (k in sh.imp) { if (!b || k.split('|')[0] === b) { r.p++; if (sh.done[k]) r.d++; } }
+    for (k in sh.exp) { if (!b || k.split('|')[0] === b) r.l++; }
     return r;
   }
   function vib(t) { if (S.vib && window.NativeHaptics) { try { window.NativeHaptics(t); } catch (e) {} } }
@@ -87,11 +132,11 @@
       h += '<button type="button" class="btn ' + (btns[i].cls || '') + '" data-mb="' + i + '">' + esc(btns[i].t) + '</button>';
     }
     m.innerHTML = h + '</div></div>';
-    m._b = btns; m.hidden = false;
+    m._b = btns; m._v = null; m.hidden = false;
     var inp = m.querySelector('input[type=text]');
     if (inp) setTimeout(function () { inp.focus(); }, 60);
   }
-  function closeModal() { var m = $('modal'); m.hidden = true; m.innerHTML = ''; m._b = null; }
+  function closeModal() { var m = $('modal'); m.hidden = true; m.innerHTML = ''; m._b = null; m._v = null; }
   function ask(title, label, val, cb) {
     modal(title, '<p>' + esc(label) + '</p><input type="text" id="mi" maxlength="40" value="' + esc(val) + '">', [
       { t: 'Cancelar' },
@@ -105,7 +150,7 @@
   /* ---------- Dibujo ---------- */
   function render() {
     var c = count(null);
-    $('ttl').textContent = S.buque;
+    $('ttl').textContent = SH().name;
     $('cnt').innerHTML = '<span class="okc">Desc.<br><b>' + c.d + '</b>/' + c.p + '</span><span>Carg.<br><b>' + c.l + '</b></span>';
     var navb = document.querySelectorAll('nav button');
     for (var i = 0; i < navb.length; i++) { navb[i].className = navb[i].getAttribute('data-tab') === tab ? 'on' : ''; }
@@ -115,9 +160,9 @@
     renderBays(); renderTools(); renderGrid();
   }
   function renderBays() {
-    var h = '';
-    for (var i = 0; i < S.bays.length; i++) {
-      h += '<button type="button" class="bay' + (S.bays[i] === bay ? ' on' : '') + '" data-bay="' + esc(S.bays[i]) + '">' + esc(S.bays[i]) + '</button>';
+    var h = '', b = SH().bays;
+    for (var i = 0; i < b.length; i++) {
+      h += '<button type="button" class="bay' + (b[i].id === bay ? ' on' : '') + '" data-bay="' + esc(b[i].id) + '">' + esc(b[i].id) + '</button>';
     }
     h += '<button type="button" class="bay" data-addbay="1">+ Bahía</button>';
     $('bays').innerHTML = h;
@@ -144,22 +189,25 @@
     $('tools').innerHTML = h;
   }
   function renderGrid() {
-    if (!bay) {
-      $('grid').innerHTML = '<div class="empty">Aún no hay bahías.<br><br><button type="button" class="btn pri" data-addbay="1">Agregar bahía</button></div>';
+    var cfg = bcfg(bay), sh = SH();
+    if (!cfg) {
+      $('grid').innerHTML = '<div class="empty">Este buque aún no tiene bahías.<br><br><button type="button" class="btn pri" data-addbay="1">Agregar bahía</button></div>';
       return;
     }
-    var h = '<div class="g"><div></div>', i, j, k, v, t, secs = [['SOBRE CUBIERTA', ON], ['BAJO CUBIERTA', UN]];
-    for (i = 0; i < ROWS.length; i++) h += '<div class="ch">' + ROWS[i] + '</div>';
-    for (var s = 0; s < 2; s++) {
+    var R = rowLabels(cfg.rows), secs = [['SOBRE CUBIERTA', tierLabels(true, cfg.on)], ['BAJO CUBIERTA', tierLabels(false, cfg.un)]];
+    var h = '<div class="g' + (cfg.rows > 12 ? ' sm' : '') + '" style="grid-template-columns:24px repeat(' + R.length + ',minmax(0,1fr))"><div></div>', i, j, s, k, v, t;
+    for (i = 0; i < R.length; i++) h += '<div class="ch">' + R[i] + '</div>';
+    for (s = 0; s < 2; s++) {
+      if (!secs[s][1].length) continue;
       h += '<div class="sec">' + secs[s][0] + '</div>';
       for (j = 0; j < secs[s][1].length; j++) {
         t = secs[s][1][j];
         h += '<div class="lb">' + t + '</div>';
-        for (i = 0; i < ROWS.length; i++) {
-          k = bay + '|' + ROWS[i] + '|' + t;
-          v = tab === 'imp' ? S.imp[k] : S.exp[k];
+        for (i = 0; i < R.length; i++) {
+          k = bay + '|' + R[i] + '|' + t;
+          v = tab === 'imp' ? sh.imp[k] : sh.exp[k];
           if (!v) { h += '<button type="button" class="c" data-k="' + k + '"></button>'; continue; }
-          if (tab === 'imp' && S.done[k]) {
+          if (tab === 'imp' && sh.done[k]) {
             h += '<button type="button" class="c dn" style="border-color:' + col(v) + ';color:' + col(v) + '" data-k="' + k + '">' + CHK + '</button>';
           } else {
             h += '<button type="button" class="c" style="background:' + col(v) + ';border-color:' + col(v) + '" data-k="' + k + '">' + esc(v) + '</button>';
@@ -167,12 +215,13 @@
         }
       }
     }
-    h += '</div><button type="button" class="btn blk" data-delbay="1">Eliminar bahía ' + esc(bay) + '</button>';
+    h += '</div><button type="button" class="btn blk" data-editcells="1">Editar celdas de la bahía ' + esc(bay) + '</button>' +
+      '<button type="button" class="btn blk" data-delbay="1">Eliminar bahía ' + esc(bay) + '</button>';
     $('grid').innerHTML = h;
   }
   function renderRes() {
-    var t = count(null), h = '', i;
-    h += '<div class="card"><h4>Totales</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
+    var t = count(null), h = '';
+    h += '<div class="card"><h4>Totales - ' + esc(SH().name) + '</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
     h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b></p></div>';
     h += '<div class="card"><h4>Por bahía</h4>' + tabla() + '</div>';
     h += '<div class="card"><h4>Archivos</h4><button type="button" class="btn pri blk" data-act="pdf">Compartir resumen en PDF</button>' +
@@ -180,45 +229,98 @@
       '<button type="button" class="btn blk" data-act="res">Restaurar respaldo</button></div>';
     h += '<div class="card"><h4>Ajustes</h4><div class="row"><span>Vibrar al marcar</span><button type="button" class="sw' + (S.vib ? ' on' : '') + '" data-act="vib" aria-label="Vibración"></button></div>' +
       '<button type="button" class="btn blk" data-act="vtest">Probar vibración</button>' +
-      '<button type="button" class="btn blk" data-act="name">Cambiar nombre del buque</button>' +
+      '<button type="button" class="btn blk" data-act="ships">Cambiar o agregar buque</button>' +
+      '<button type="button" class="btn blk" data-act="name">Renombrar este buque</button>' +
       '<button type="button" class="btn dan blk" data-act="wipe">Borrar todo</button></div>';
     $('res').innerHTML = h;
   }
   function tabla() {
-    if (!S.bays.length) return '<p class="hint">Sin bahías.</p>';
+    var b = SH().bays;
+    if (!b.length) return '<p class="hint">Sin bahías.</p>';
     var h = '<table><tr><th>Bahía</th><th>Plan</th><th>Desc.</th><th>Pend.</th><th>Carg.</th></tr>';
-    for (var i = 0; i < S.bays.length; i++) {
-      var c = count(S.bays[i]);
-      h += '<tr><td>' + esc(S.bays[i]) + '</td><td>' + c.p + '</td><td>' + c.d + '</td><td>' + (c.p - c.d) + '</td><td>' + c.l + '</td></tr>';
+    for (var i = 0; i < b.length; i++) {
+      var c = count(b[i].id);
+      h += '<tr><td>' + esc(b[i].id) + '</td><td>' + c.p + '</td><td>' + c.d + '</td><td>' + (c.p - c.d) + '</td><td>' + c.l + '</td></tr>';
     }
     return h + '</table>';
   }
 
   /* ---------- Acciones ---------- */
   function tapCell(k) {
+    var sh = SH();
     if (tab === 'imp') {
       if (mode === 'cap') {
-        if (!sel || S.imp[k] === sel) { delete S.imp[k]; delete S.done[k]; }
-        else S.imp[k] = sel;
+        if (!sel || sh.imp[k] === sel) { delete sh.imp[k]; delete sh.done[k]; }
+        else sh.imp[k] = sel;
         vib('suave');
-      } else if (S.imp[k]) {
-        if (S.done[k]) { delete S.done[k]; vib('aviso'); } else { S.done[k] = 1; vib('exito'); }
+      } else if (sh.imp[k]) {
+        if (sh.done[k]) { delete sh.done[k]; vib('aviso'); } else { sh.done[k] = 1; vib('exito'); }
       } else { vib('aviso'); return; }
     } else {
-      if (S.exp[k]) { delete S.exp[k]; vib('aviso'); } else { S.exp[k] = sel || S.codes[0].c; vib('exito'); }
+      if (sh.exp[k]) { delete sh.exp[k]; vib('aviso'); } else { sh.exp[k] = sel || S.codes[0].c; vib('exito'); }
     }
     save(); render();
   }
   function addBay() {
-    ask('Nueva bahía', 'Número de bahía (ejemplo: 01)', '', function (v) {
-      v = v.replace(/[^A-Za-z0-9]/g, '').slice(0, 6);
+    ask('Nueva bahía', 'Solo números o letras sin acentos (ejemplo: 02)', '', function (v) {
+      v = v.replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
       if (!v) { toast('Escribe un número de bahía'); return false; }
-      if (S.bays.indexOf(v) >= 0) { toast('Esa bahía ya existe'); return false; }
-      S.bays.push(v); bay = v; save(); render();
+      if (bcfg(v)) { toast('Esa bahía ya existe'); return false; }
+      var base = bcfg(bay) || DEF;
+      SH().bays.push({ id: v, rows: base.rows, on: base.on, un: base.un });
+      sortBays(); bay = v; save(); render();
     });
   }
+  function validKeys(v, id) {
+    var o = {}, R = rowLabels(v.rows), T = tierLabels(true, v.on).concat(tierLabels(false, v.un)), i, j;
+    for (i = 0; i < R.length; i++) { for (j = 0; j < T.length; j++) o[id + '|' + R[i] + '|' + T[j]] = 1; }
+    return o;
+  }
+  function lostCount(v, ids) {
+    var sh = SH(), n = 0, i, k, ok;
+    for (i = 0; i < ids.length; i++) {
+      ok = validKeys(v, ids[i]);
+      for (k in sh.imp) { if (k.indexOf(ids[i] + '|') === 0 && !ok[k]) n++; }
+      for (k in sh.exp) { if (k.indexOf(ids[i] + '|') === 0 && !ok[k]) n++; }
+    }
+    return n;
+  }
+  function applyCfg(v, ids) {
+    var sh = SH(), i, k, ok, c;
+    for (i = 0; i < ids.length; i++) {
+      ok = validKeys(v, ids[i]);
+      for (k in sh.imp) { if (k.indexOf(ids[i] + '|') === 0 && !ok[k]) { delete sh.imp[k]; delete sh.done[k]; } }
+      for (k in sh.exp) { if (k.indexOf(ids[i] + '|') === 0 && !ok[k]) delete sh.exp[k]; }
+      c = bcfg(ids[i]); c.rows = v.rows; c.on = v.on; c.un = v.un;
+    }
+    save(); render();
+  }
+  function editCells() {
+    var c = bcfg(bay);
+    if (!c) return;
+    var v = { rows: c.rows, on: c.on, un: c.un, all: false };
+    function line(lbl, key) {
+      return '<div class="stp"><span>' + lbl + '</span><span><button type="button" data-step="' + key + ',-1">-</button><b id="sv_' + key + '">' + v[key] + '</b><button type="button" data-step="' + key + ',1">+</button></span></div>';
+    }
+    modal('Celdas de la bahía ' + bay,
+      '<p>Filas: si el número es impar incluye la 00 (13 = 12 a 02, 00, 01 a 11; 14 = 14 a 02, 01 a 13). Pisos: sobre cubierta desde 82, bajo cubierta desde 02.</p>' +
+      line('Filas', 'rows') + line('Pisos sobre cubierta', 'on') + line('Pisos bajo cubierta', 'un') +
+      '<div class="row"><span>Aplicar a todas las bahías</span><button type="button" class="sw" data-stepall="1"></button></div>', [
+        { t: 'Cancelar' },
+        { t: 'Guardar', cls: 'pri', fn: function () {
+          var ids = [], b = SH().bays, i;
+          if (v.all) { for (i = 0; i < b.length; i++) ids.push(b[i].id); } else ids = [bay];
+          var n = lostCount(v, ids);
+          if (n > 0) {
+            sure('Quitar celdas', 'Se borrarán ' + n + ' celdas que tienen datos.', 'Quitar', function () { applyCfg(v, ids); });
+            return false;
+          }
+          applyCfg(v, ids);
+        } }
+      ]);
+    $('modal')._v = v;
+  }
   function addCode() {
-    var chosen = PRESET[0];
     var sw = '<div class="sws">';
     for (var i = 0; i < PRESET.length; i++) sw += '<button type="button" class="' + (i === 0 ? 'on' : '') + '" style="background:' + PRESET[i] + '" data-sw="' + PRESET[i] + '"></button>';
     modal('Código de puerto', '<p>Letras o números (máx. 4). Si ya existe, se cambia su color.</p><input type="text" id="mi" maxlength="4">' + sw + '</div>', [
@@ -226,7 +328,7 @@
       { t: 'Guardar', cls: 'pri', fn: function () {
         var v = $('mi').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
         var on = document.querySelector('.sws button.on');
-        chosen = on ? on.getAttribute('data-sw') : chosen;
+        var chosen = on ? on.getAttribute('data-sw') : PRESET[0];
         if (!v) { toast('Escribe un código'); return false; }
         var f = false;
         for (var j = 0; j < S.codes.length; j++) { if (S.codes[j].c === v) { S.codes[j].color = chosen; f = true; } }
@@ -235,6 +337,38 @@
       } }
     ]);
   }
+  /* ---------- Buques ---------- */
+  function shipsModal() {
+    var h = '', i;
+    for (i = 0; i < S.ships.length; i++) {
+      h += '<button type="button" class="btn blk' + (S.ships[i].id === S.cur ? ' pri' : '') + '" data-ship="' + esc(S.ships[i].id) + '">' + esc(S.ships[i].name) + '</button>';
+    }
+    h += '<button type="button" class="btn blk" data-shipact="ren">Renombrar este buque</button><button type="button" class="btn dan blk" data-shipact="del">Eliminar este buque</button>';
+    modal('Buques', h, [{ t: 'Cerrar' }, { t: 'Nuevo buque', cls: 'pri', fn: function () { newShip(); return false; } }]);
+  }
+  function newShip() {
+    ask('Nuevo buque', 'Nombre del buque', '', function (v) {
+      if (!v) { toast('Escribe un nombre'); return false; }
+      var sh = mkShip(v.slice(0, 40));
+      S.ships.push(sh); S.cur = sh.id; bay = null; save(); render();
+    });
+  }
+  function renameShip() {
+    ask('Nombre del buque', 'Nombre', SH().name, function (v) {
+      if (!v) return false;
+      SH().name = v.slice(0, 40); save(); render();
+    });
+  }
+  function delShip() {
+    if (S.ships.length < 2) { toast('Debe quedar al menos un buque'); return; }
+    sure('Eliminar buque', 'Se borra "' + SH().name + '" con todas sus bahías y datos.', 'Eliminar', function () {
+      for (var i = 0; i < S.ships.length; i++) { if (S.ships[i].id === S.cur) { S.ships.splice(i, 1); break; } }
+      S.cur = S.ships[0].id;
+      bay = SH().bays.length ? SH().bays[0].id : null;
+      save(); render();
+    });
+  }
+  /* ---------- Archivos ---------- */
   function stamp() { return new Date().toISOString().slice(0, 10); }
   function dl(blob, name) {
     var a = document.createElement('a');
@@ -255,16 +389,15 @@
       try { o = JSON.parse(fr.result); } catch (e) { o = null; }
       if (!valid(o)) { toast('El archivo no es un respaldo válido'); return; }
       sure('Restaurar respaldo', 'Se reemplazarán todos los datos actuales.', 'Restaurar', function () {
-        S = norm(o); bay = S.bays[0] || null; sel = S.codes[0].c; save(); render(); toast('Respaldo restaurado');
+        S = norm(o); bay = SH().bays.length ? SH().bays[0].id : null; sel = S.codes[0].c; save(); render(); toast('Respaldo restaurado');
       });
     };
     fr.readAsText(file);
   }
   function pdf() {
     if (!window.html2pdf) { toast('PDF disponible solo en la app instalada'); return; }
-    var t = count(null);
-    var box = $('pdfbox');
-    box.innerHTML = '<div style="background:#fff;color:#000;padding:20px;font-family:sans-serif"><h2 style="margin:0">' + esc(S.buque) + '</h2><p>Resumen de operación - ' + stamp() +
+    var t = count(null), box = $('pdfbox');
+    box.innerHTML = '<div style="background:#fff;color:#000;padding:20px;font-family:sans-serif"><h2 style="margin:0">' + esc(SH().name) + '</h2><p>Resumen de operación - ' + stamp() +
       '</p><p><b>Plan:</b> ' + t.p + ' &nbsp; <b>Descargados:</b> ' + t.d + ' &nbsp; <b>Pendientes:</b> ' + (t.p - t.d) + ' &nbsp; <b>Cargados:</b> ' + t.l + ' &nbsp; <b>Movimientos:</b> ' + (t.d + t.l) + '</p>' +
       tabla().replace('<table>', '<table style="width:100%;border-collapse:collapse;font-size:14px" border="1" cellpadding="5">') + '</div>';
     var name = 'BuqueChecking_' + stamp() + '.pdf';
@@ -284,10 +417,10 @@
     else if (a === 'vtest') {
       if (!window.NativeHaptics) { toast('La vibración funciona solo en la app instalada'); return; }
       window.NativeHaptics('prueba').then(function (r) { toast(r === 'ok' ? 'Vibración enviada' : r); });
-    } else if (a === 'name') {
-      ask('Nombre del buque', 'Nombre', S.buque, function (v) { if (!v) return false; S.buque = v; save(); render(); });
-    } else if (a === 'wipe') {
-      sure('Borrar todo', 'Se borrarán bahías, plan y cargas. No se puede deshacer.', 'Borrar', function () {
+    } else if (a === 'ships') shipsModal();
+    else if (a === 'name') renameShip();
+    else if (a === 'wipe') {
+      sure('Borrar todo', 'Se borrarán todos los buques, bahías, planes y cargas. No se puede deshacer.', 'Borrar', function () {
         S = defaults(); bay = null; sel = S.codes[0].c; save(); render();
       });
     }
@@ -301,17 +434,33 @@
     }
     return null;
   }
+  var STEP = { rows: [1, 16], on: [0, 8], un: [0, 10] };
   document.addEventListener('click', function (e) {
     var el, m = $('modal');
     if (!m.hidden) {
-      el = up(e.target, 'data-sw');
-      if (el) {
+      if ((el = up(e.target, 'data-sw'))) {
         var all = document.querySelectorAll('.sws button');
         for (var i = 0; i < all.length; i++) all[i].className = '';
         el.className = 'on'; return;
       }
-      el = up(e.target, 'data-mb');
-      if (el && m._b) {
+      if ((el = up(e.target, 'data-step')) && m._v) {
+        var p = el.getAttribute('data-step').split(','), L = STEP[p[0]];
+        m._v[p[0]] = Math.max(L[0], Math.min(L[1], m._v[p[0]] + parseInt(p[1], 10)));
+        $('sv_' + p[0]).textContent = m._v[p[0]]; return;
+      }
+      if ((el = up(e.target, 'data-stepall')) && m._v) {
+        m._v.all = !m._v.all; el.className = 'sw' + (m._v.all ? ' on' : ''); return;
+      }
+      if ((el = up(e.target, 'data-ship'))) {
+        S.cur = el.getAttribute('data-ship');
+        bay = SH().bays.length ? SH().bays[0].id : null;
+        save(); closeModal(); render(); return;
+      }
+      if ((el = up(e.target, 'data-shipact'))) {
+        if (el.getAttribute('data-shipact') === 'ren') renameShip(); else delShip();
+        return;
+      }
+      if ((el = up(e.target, 'data-mb')) && m._b) {
         var b = m._b[+el.getAttribute('data-mb')];
         if (b.fn && b.fn() === false) return;
         closeModal();
@@ -326,20 +475,22 @@
     }
     if ((el = up(e.target, 'data-bay'))) { bay = el.getAttribute('data-bay'); render(); return; }
     if (up(e.target, 'data-addbay')) { addBay(); return; }
+    if (up(e.target, 'data-editcells')) { editCells(); return; }
     if ((el = up(e.target, 'data-mode'))) { mode = el.getAttribute('data-mode'); render(); return; }
     if ((el = up(e.target, 'data-code'))) { sel = el.getAttribute('data-code'); render(); return; }
     if (up(e.target, 'data-addcode')) { addCode(); return; }
     if (up(e.target, 'data-delbay')) {
       sure('Eliminar bahía ' + bay, 'Se borra su plan y sus cargas.', 'Eliminar', function () {
-        var k, p = bay + '|';
-        for (k in S.imp) { if (k.indexOf(p) === 0) { delete S.imp[k]; delete S.done[k]; } }
-        for (k in S.exp) { if (k.indexOf(p) === 0) delete S.exp[k]; }
-        S.bays.splice(S.bays.indexOf(bay), 1); bay = S.bays[0] || null; save(); render();
+        var sh = SH(), k, p = bay + '|';
+        for (k in sh.imp) { if (k.indexOf(p) === 0) { delete sh.imp[k]; delete sh.done[k]; } }
+        for (k in sh.exp) { if (k.indexOf(p) === 0) delete sh.exp[k]; }
+        sh.bays.splice(sh.bays.indexOf(bcfg(bay)), 1);
+        bay = sh.bays.length ? sh.bays[0].id : null; save(); render();
       });
       return;
     }
     if ((el = up(e.target, 'data-act'))) { act(el.getAttribute('data-act')); return; }
-    if (up(e.target, 'id') && up(e.target, 'id').id === 'ttl') act('name');
+    if (up(e.target, 'id') && up(e.target, 'id').id === 'ttl') shipsModal();
   });
   $('file').addEventListener('change', function () {
     if (this.files && this.files[0]) restore(this.files[0]);

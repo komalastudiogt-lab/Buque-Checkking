@@ -7,7 +7,7 @@
   var tab = 'cap', bay = null, sel = '', tt = null;
 
   function mkShip(name) {
-    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {} };
+    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [] };
   }
   function defaults() {
     var sh = mkShip('Mi buque');
@@ -26,7 +26,19 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function save() { try { localStorage.setItem(P + 'data', JSON.stringify(S)); } catch (e) {} }
+  function purgeLog() {
+    var sh = SH(), l = sh.log || [], r = [], i, e;
+    for (i = 0; i < l.length; i++) { e = l[i]; if (e.a === 'D' ? sh.done[e.k] : sh.exp[e.k]) r.push(e); }
+    sh.log = r;
+  }
+  function logAdd(a, k) {
+    var sh = SH();
+    if (!sh.log) sh.log = [];
+    sh.log.push({ t: Date.now(), a: a, k: k, c: (a === 'D' ? sh.imp[k] : sh.exp[k]) || '' });
+    if (sh.log.length > 5000) sh.log.splice(0, sh.log.length - 5000);
+  }
+  function save() { try { purgeLog(); } catch (e) {}
+    try { localStorage.setItem(P + 'data', JSON.stringify(S)); } catch (e) {} }
   function SH() {
     for (var i = 0; i < S.ships.length; i++) { if (S.ships[i].id === S.cur) return S.ships[i]; }
     return S.ships[0];
@@ -72,6 +84,13 @@
     for (k in im) { if (re.test(k) && ids.indexOf(k.split('|')[0]) >= 0 && typeof im[k] === 'string') sh.imp[k] = im[k].slice(0, 4); }
     for (k in dn) { if (sh.imp[k] && dn[k]) sh.done[k] = 1; }
     for (k in ex) { if (re.test(k) && ids.indexOf(k.split('|')[0]) >= 0 && typeof ex[k] === 'string') sh.exp[k] = ex[k].slice(0, 4); }
+    var lg = Array.isArray(x.log) ? x.log : [], q;
+    for (i = 0; i < lg.length && sh.log.length < 5000; i++) {
+      q = lg[i];
+      if (q && (q.a === 'D' || q.a === 'C') && typeof q.t === 'number' && isFinite(q.t) && q.t > 0 && typeof q.k === 'string' && re.test(q.k)) {
+        sh.log.push({ t: q.t, a: q.a, k: q.k, c: typeof q.c === 'string' ? q.c.slice(0, 4) : '' });
+      }
+    }
     return sh;
   }
   function norm(o) {
@@ -229,6 +248,7 @@
     var t = count(null), h = '';
     h += '<div class="card"><h4>Totales - ' + esc(SH().name) + '</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
     h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b></p></div>';
+    h += logCard();
     h += '<div class="card"><h4>Por bahía</h4>' + tabla() + '</div>';
     h += '<div class="card"><h4>Archivos</h4><button type="button" class="btn pri blk" data-act="pdf">Compartir resumen en PDF</button>' +
       '<button type="button" class="btn blk" data-act="bak">Guardar respaldo (JSON)</button>' +
@@ -239,6 +259,48 @@
       '<button type="button" class="btn blk" data-act="name">Renombrar este buque</button>' +
       '<button type="button" class="btn dan blk" data-act="wipe">Borrar todo</button></div>';
     $('res').innerHTML = h;
+  }
+  function hh(t) { var d = new Date(t); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function dur(h) { var m = Math.round(h * 60); return Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; }
+  function stats() {
+    var l = SH().log || [], r = { n: l.length, d: 0, c: 0, first: 0, last: 0, perH: 0, hrs: 0, l60: 0, hours: {} }, i, e, d, hk, now = Date.now();
+    for (i = 0; i < l.length; i++) {
+      e = l[i];
+      if (e.a === 'D') r.d++; else r.c++;
+      if (!r.first || e.t < r.first) r.first = e.t;
+      if (e.t > r.last) r.last = e.t;
+      if (now - e.t <= 3600000) r.l60++;
+      d = new Date(e.t);
+      hk = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours());
+      if (!r.hours[hk]) r.hours[hk] = { d: 0, c: 0 };
+      if (e.a === 'D') r.hours[hk].d++; else r.hours[hk].c++;
+    }
+    if (r.n > 1) { r.hrs = Math.max((r.last - r.first) / 3600000, 1 / 60); r.perH = r.n / r.hrs; }
+    return r;
+  }
+  function hoursTable(st, max) {
+    var ks = Object.keys(st.hours).sort();
+    if (!ks.length) return '';
+    if (max) ks = ks.slice(-max);
+    var h = '<table class="t2"><tr><th>Hora</th><th>Desc.</th><th>Carg.</th><th>Total</th></tr>';
+    for (var i = 0; i < ks.length; i++) {
+      var v = st.hours[ks[i]], p = ks[i].split(' ');
+      h += '<tr><td>' + p[0].slice(8) + '/' + p[0].slice(5, 7) + ' ' + p[1] + ':00</td><td>' + v.d + '</td><td>' + v.c + '</td><td>' + (v.d + v.c) + '</td></tr>';
+    }
+    return h + '</table>';
+  }
+  function logCard() {
+    var st = stats(), t = count(null), l = SH().log || [], h = '<div class="card"><h4>Bitácora</h4>';
+    if (!st.n) return h + '<p class="hint">Aún no hay movimientos con hora. Se registran al marcar descargas y cargas.</p></div>';
+    h += '<div class="big"><div><b>' + (st.n > 1 ? st.perH.toFixed(1) : '-') + '</b>Mov. por hora</div><div><b>' + st.l60 + '</b>Última hora</div><div><b>' + (st.n > 1 ? dur(st.hrs) : '-') + '</b>Duración</div></div>';
+    h += '<p class="hint">Primer movimiento: ' + hh(st.first) + ' - Último: ' + hh(st.last) + '</p>';
+    if (st.n < t.d + t.l) h += '<p class="hint">Los movimientos marcados antes de esta versión no tienen hora.</p>';
+    h += '<p class="hint">Por hora</p>' + hoursTable(st, 12) + '<p class="hint">Últimos movimientos</p><table class="t2"><tr><th>Hora</th><th>Mov.</th><th>Bahía</th><th>Celda</th><th>Cód.</th></tr>';
+    for (var i = l.length - 1; i >= 0 && i >= l.length - 10; i--) {
+      var p = l[i].k.split('|');
+      h += '<tr><td>' + hh(l[i].t) + '</td><td>' + (l[i].a === 'D' ? 'Desc.' : 'Carg.') + '</td><td>' + esc(p[0]) + '</td><td>' + p[1] + '-' + p[2] + '</td><td>' + esc(l[i].c) + '</td></tr>';
+    }
+    return h + '</table></div>';
   }
   function tabla() {
     var b = SH().bays;
@@ -260,10 +322,10 @@
       vib('suave');
     } else if (tab === 'des') {
       if (sh.imp[k]) {
-        if (sh.done[k]) { delete sh.done[k]; vib('aviso'); } else { sh.done[k] = 1; vib('exito'); }
+        if (sh.done[k]) { delete sh.done[k]; vib('aviso'); } else { sh.done[k] = 1; logAdd('D', k); vib('exito'); }
       } else { vib('aviso'); return; }
     } else {
-      if (sh.exp[k]) { delete sh.exp[k]; vib('aviso'); } else { sh.exp[k] = sel || S.codes[0].c; vib('exito'); }
+      if (sh.exp[k]) { delete sh.exp[k]; vib('aviso'); } else { sh.exp[k] = sel || S.codes[0].c; logAdd('C', k); vib('exito'); }
     }
     save(); render();
   }
@@ -400,12 +462,18 @@
     };
     fr.readAsText(file);
   }
+  function pdfT(x) { return x.replace(/<table[^>]*>/g, '<table style="width:100%;border-collapse:collapse;font-size:13px;text-align:center" border="1" cellpadding="4">'); }
+  function pdfLog() {
+    var st = stats();
+    if (!st.n) return '';
+    return '<h3>Bitácora</h3><p>Primer movimiento: ' + hh(st.first) + ' - Último: ' + hh(st.last) + (st.n > 1 ? ' - Duración: ' + dur(st.hrs) + ' - Movimientos por hora: ' + st.perH.toFixed(1) : '') + '</p>' + pdfT(hoursTable(st, 0));
+  }
   function pdf() {
     if (!window.html2pdf) { toast('PDF disponible solo en la app instalada'); return; }
     var t = count(null), box = $('pdfbox');
     box.innerHTML = '<div style="background:#fff;color:#000;padding:20px;font-family:sans-serif"><h2 style="margin:0">' + esc(SH().name) + '</h2><p>Resumen de operación - ' + stamp() +
       '</p><p><b>Plan:</b> ' + t.p + ' &nbsp; <b>Descargados:</b> ' + t.d + ' &nbsp; <b>Pendientes:</b> ' + (t.p - t.d) + ' &nbsp; <b>Cargados:</b> ' + t.l + ' &nbsp; <b>Movimientos:</b> ' + (t.d + t.l) + '</p>' +
-      tabla().replace('<table>', '<table style="width:100%;border-collapse:collapse;font-size:14px" border="1" cellpadding="5">') + '</div>';
+      pdfT(tabla()) + pdfLog() + '</div>';
     var name = 'BuqueChecking_' + stamp() + '.pdf';
     window.html2pdf().from(box.firstChild).set({ margin: 8, jsPDF: { unit: 'mm', format: 'a4' } }).outputPdf('datauristring').then(function (u) {
       var b64 = u.split(',')[1];

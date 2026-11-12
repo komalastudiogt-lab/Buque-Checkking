@@ -73,3 +73,16 @@ nav button.on{color:var(--ac);box-shadow:inset 0 3px 0 var(--ac)}
 .c.fr{border:2px dashed var(--ac)}
 .step{margin:2px 0 6px;font-weight:700;color:var(--ac);font-size:15px}
 .t2{font-size:13px;margin-bottom:8px}
+*{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input[type=text]{-webkit-user-select:text;user-select:text}
+.c{position:relative}
+.tg{position:absolute;top:0;right:1px;font-size:7px;font-style:normal;line-height:1;font-weight:800}
+.tgs{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.tgb{padding:10px 12px;border-radius:10px;border:2px solid var(--bd);background:var(--sf2);color:var(--tx);font-weight:700;font-size:14px}
+.tgb.on{border-color:var(--ac);background:var(--ac);color:#0b0f14}
+.pv{height:44px;border-radius:10px;border:1px solid var(--bd);margin:10px 0 2px}
+.rl{display:block;font-size:13px;color:var(--mu);margin-top:8px}
+.rl input[type=text]{margin-top:4px}
+input[type=range]{display:block;width:100%;height:26px;margin:4px 0 0;border-radius:13px;background:#444;-webkit-appearance:none;appearance:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:28px;height:28px;border-radius:50%;background:#fff;border:3px solid #000}
+input.hue{background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}

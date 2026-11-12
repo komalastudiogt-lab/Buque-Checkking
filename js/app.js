@@ -3,6 +3,7 @@
   var PRESET = ['#e0525a', '#3fa7d6', '#59c36a', '#f2a541', '#b57edc', '#2ec4b6', '#f06eaa', '#9aa5b1', '#c9b037', '#ff8a4c', '#7f9cff', '#a3d977'];
   var CHK = '<svg viewBox="0 0 24 24" width="14" height="14"><path d="M4 12l5 5L20 6" fill="none" stroke="currentColor" stroke-width="3"/></svg>';
   var DEF = { rows: 11, on: 5, un: 6 };
+  var NA = 'N/A', NACOL = '#6b7785', editC = false;
   var S = defaults();
   var tab = 'cap', bay = null, sel = '', tt = null;
 
@@ -16,7 +17,7 @@
       codes: [
         { c: 'EH', color: '#e0525a' }, { c: 'HN', color: '#3fa7d6' }, { c: 'LN', color: '#59c36a' },
         { c: 'BO', color: '#f2a541' }, { c: 'LM', color: '#b57edc' }, { c: 'MI', color: '#2ec4b6' },
-        { c: 'SV', color: '#f06eaa' }, { c: 'B', color: '#9aa5b1' }
+        { c: 'SV', color: '#f06eaa' }, { c: 'B', color: '#9aa5b1' }, { c: 'N/A', color: '#6b7785' }
       ]
     };
   }
@@ -95,7 +96,7 @@
     }
     var re = /^[A-Za-z0-9]{1,8}\|\d\d\|\d\d$/, im = x.imp || {}, dn = x.done || {}, ex = x.exp || {};
     for (k in im) { if (re.test(k) && ids.indexOf(k.split('|')[0]) >= 0 && typeof im[k] === 'string') sh.imp[k] = im[k].slice(0, 4); }
-    for (k in dn) { if (sh.imp[k] && dn[k]) sh.done[k] = 1; }
+    for (k in dn) { if (sh.imp[k] && sh.imp[k] !== NA && dn[k]) sh.done[k] = 1; }
     for (k in ex) { if (re.test(k) && ids.indexOf(k.split('|')[0]) >= 0 && typeof ex[k] === 'string') sh.exp[k] = ex[k].slice(0, 4); }
     var lg = Array.isArray(x.log) ? x.log : [], q;
     for (i = 0; i < lg.length && sh.log.length < 5000; i++) {
@@ -122,11 +123,14 @@
     var cs = [];
     for (i = 0; i < o.codes.length; i++) {
       var c = o.codes[i];
-      if (c && typeof c.c === 'string' && /^[A-Za-z0-9]{1,4}$/.test(c.c) && /^#[0-9a-fA-F]{6}$/.test(c.color || '')) {
+      if (c && typeof c.c === 'string' && /^([A-Za-z0-9]{1,4}|N\/A)$/.test(c.c) && /^#[0-9a-fA-F]{6}$/.test(c.color || '')) {
         cs.push({ c: c.c.toUpperCase(), color: c.color });
       }
     }
     if (cs.length) r.codes = cs;
+    var hasNA = false;
+    for (i = 0; i < r.codes.length; i++) { if (r.codes[i].c === NA) hasNA = true; }
+    if (!hasNA) r.codes.push({ c: NA, color: NACOL });
     var list = Array.isArray(o.ships) ? o.ships : [{ name: o.buque, bays: o.bays, imp: o.imp, done: o.done, exp: o.exp }];
     var seen = {};
     r.ships = [];
@@ -148,13 +152,17 @@
     sel = S.codes[0].c;
     save();
   }
+  function firstReal() {
+    for (var i = 0; i < S.codes.length; i++) { if (S.codes[i].c !== NA) return S.codes[i].c; }
+    return S.codes[0].c;
+  }
   function col(c) {
     for (var i = 0; i < S.codes.length; i++) { if (S.codes[i].c === c) return S.codes[i].color; }
     return '#9aa5b1';
   }
   function count(b) {
-    var sh = SH(), r = { p: 0, d: 0, l: 0 }, k;
-    for (k in sh.imp) { if (!b || k.split('|')[0] === b) { r.p++; if (sh.done[k]) r.d++; } }
+    var sh = SH(), r = { p: 0, d: 0, l: 0, na: 0 }, k;
+    for (k in sh.imp) { if (!b || k.split('|')[0] === b) { if (sh.imp[k] === NA) { r.na++; continue; } r.p++; if (sh.done[k]) r.d++; } }
     for (k in sh.exp) { if (!b || k.split('|')[0] === b) r.l++; }
     return r;
   }
@@ -214,14 +222,17 @@
     if (eraser) h += '<button type="button" class="chip era' + (sel === '' ? ' on' : '') + '" data-code="">Borrar</button>';
     for (var i = 0; i < S.codes.length; i++) {
       var c = S.codes[i];
-      h += '<button type="button" class="chip' + (sel === c.c ? ' on' : '') + '" style="background:' + c.color + ';color:' + ink(c.color) + '" data-code="' + esc(c.c) + '">' + esc(c.c) + '</button>';
+      if (tab === 'exp' && c.c === NA) continue;
+      h += '<button type="button" class="chip' + (sel === c.c && !editC ? ' on' : '') + '" style="background:' + c.color + ';color:' + ink(c.color) + '" data-code="' + esc(c.c) + '">' + esc(c.c) + '</button>';
     }
-    return h + '<button type="button" class="chip add" data-addcode="1">+ Código</button></div>';
+    h += '<button type="button" class="chip add" data-addcode="1">+ Código</button>' +
+      '<button type="button" class="chip add' + (editC ? ' on' : '') + '" data-editc="1">' + (editC ? 'Listo' : 'Editar') + '</button></div>';
+    return h + (editC ? '<p class="hint">Modo edición: toca un código para cambiar su nombre o color, o eliminarlo.</p>' : '');
   }
   function renderTools() {
     var h = '', c = count(bay || null);
     if (tab === 'cap') {
-      h = '<p class="step">Paso 1: captura el plano</p>' + palette(true) + '<p class="hint">Elige un código y toca las celdas. Toca una celda del mismo código para quitarla. Mantén presionada una celda con contenedor para marcarla (reefer, peligrosa, vacío, dañado) o anotar.</p>';
+      h = '<p class="step">Paso 1: captura el plano</p>' + palette(true) + '<p class="hint">Elige un código y toca las celdas. Toca una celda del mismo código para quitarla o elige otro para cambiarla. N/A = contenedor que no se mueve (solo referencia). Mantén presionada una celda con contenedor para marcarla (reefer, peligrosa, vacío, dañado) o anotar.</p>';
     } else if (tab === 'des') {
       h = '<p class="step">Paso 2: descarga</p><p class="hint">Toca un contenedor para marcarlo descargado. Tócalo otra vez para deshacer. Pendientes en esta bahía: <b>' + (c.p - c.d) + '</b>. Mantén presionada una celda para marcas y notas.</p>';
     } else {
@@ -276,7 +287,7 @@
   function renderRes() {
     var t = count(null), h = '';
     h += '<div class="card"><h4>Totales - ' + esc(SH().name) + '</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
-    h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b></p></div>';
+    h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b>' + (t.na ? ' - Contenedores N/A (no se mueven): <b>' + t.na + '</b>' : '') + '</p></div>';
     h += logCard() + marksCard();
     h += '<div class="card"><h4>Por bahía</h4>' + tabla() + '</div>';
     h += '<div class="card"><h4>Archivos</h4><button type="button" class="btn pri blk" data-act="pdf">Compartir resumen en PDF</button>' +
@@ -375,14 +386,15 @@
     var sh = SH();
     if (tab === 'cap') {
       if (!sel || sh.imp[k] === sel) { delete sh.imp[k]; delete sh.done[k]; }
-      else sh.imp[k] = sel;
+      else { sh.imp[k] = sel; if (sel === NA) delete sh.done[k]; }
       vib('suave');
     } else if (tab === 'des') {
+      if (sh.imp[k] === NA) { vib('aviso'); toast('N/A no se mueve. Cámbialo en el paso 1 si hay que descargarlo'); return; }
       if (sh.imp[k]) {
         if (sh.done[k]) { delete sh.done[k]; vib('aviso'); } else { sh.done[k] = 1; logAdd('D', k); vib('exito'); }
       } else { vib('aviso'); return; }
     } else {
-      if (sh.exp[k]) { delete sh.exp[k]; vib('aviso'); } else { sh.exp[k] = sel || S.codes[0].c; logAdd('C', k); vib('exito'); }
+      if (sh.exp[k]) { delete sh.exp[k]; vib('aviso'); } else { sh.exp[k] = (sel && sel !== NA) ? sel : firstReal(); logAdd('C', k); vib('exito'); }
     }
     save(); render();
   }
@@ -493,28 +505,74 @@
     $('ps').style.background = 'linear-gradient(to right,hsl(' + H + ',0%,' + L + '%),hsl(' + H + ',100%,' + L + '%))';
     $('pl').style.background = 'linear-gradient(to right,#000,hsl(' + H + ',' + SA + '%,50%),#fff)';
   }
-  function addCode() {
+  function codeUse(c) {
+    var n = 0, i, k;
+    for (i = 0; i < S.ships.length; i++) {
+      for (k in S.ships[i].imp) { if (S.ships[i].imp[k] === c) n++; }
+      for (k in S.ships[i].exp) { if (S.ships[i].exp[k] === c) n++; }
+    }
+    return n;
+  }
+  function renameCode(a, b) {
+    var i, k, sh, l, z;
+    for (i = 0; i < S.ships.length; i++) {
+      sh = S.ships[i];
+      for (k in sh.imp) { if (sh.imp[k] === a) sh.imp[k] = b; }
+      for (k in sh.exp) { if (sh.exp[k] === a) sh.exp[k] = b; }
+      l = sh.log || [];
+      for (z = 0; z < l.length; z++) { if (l[z].c === a) l[z].c = b; }
+    }
+    if (sel === a) sel = b;
+  }
+  function codeModal(oldC) {
+    var old = null, i;
+    for (i = 0; i < S.codes.length; i++) { if (S.codes[i].c === oldC) old = S.codes[i]; }
+    var isNA = !!old && old.c === NA;
+    var start = old ? old.color : PRESET[0];
     var sw = '<div class="sws">';
-    for (var i = 0; i < PRESET.length; i++) sw += '<button type="button" style="background:' + PRESET[i] + '" data-sw="' + PRESET[i] + '"></button>';
-    modal('Código de puerto', '<p>Letras o números (máx. 4). Si ya existe, se cambia su color.</p><input type="text" id="mi" maxlength="4">' +
+    for (i = 0; i < PRESET.length; i++) sw += '<button type="button" style="background:' + PRESET[i] + '" data-sw="' + PRESET[i] + '"></button>';
+    var btns = [{ t: 'Cancelar' }];
+    if (old && !isNA) {
+      btns.push({ t: 'Eliminar', cls: 'dan', fn: function () {
+        var n = codeUse(old.c), reales = 0, j;
+        for (j = 0; j < S.codes.length; j++) { if (S.codes[j].c !== NA) reales++; }
+        if (reales < 2) { toast('Debe quedar al menos un código'); return false; }
+        if (n > 0) { toast('Está en uso en ' + n + ' celdas. Cámbialo o quítalo del plano primero'); return false; }
+        sure('Eliminar código', 'Se elimina el código ' + old.c + '.', 'Eliminar', function () {
+          for (var q = 0; q < S.codes.length; q++) { if (S.codes[q].c === old.c) { S.codes.splice(q, 1); break; } }
+          if (sel === old.c) sel = firstReal();
+          save(); render();
+        });
+        return false;
+      } });
+    }
+    btns.push({ t: 'Guardar', cls: 'pri', fn: function () {
+      var raw = $('mi').value.toUpperCase().trim(), v = raw === NA ? NA : raw.replace(/[^A-Z0-9]/g, '');
+      var chosen = $('modal')._v.color, j;
+      if (isNA) v = NA;
+      if (!v) { toast('Escribe un código'); return false; }
+      if (old) {
+        if (v !== old.c) {
+          for (j = 0; j < S.codes.length; j++) { if (S.codes[j].c === v) { toast('Ese código ya existe'); return false; } }
+          renameCode(old.c, v); old.c = v;
+        }
+        old.color = chosen;
+      } else {
+        var f = false;
+        for (j = 0; j < S.codes.length; j++) { if (S.codes[j].c === v) { S.codes[j].color = chosen; f = true; } }
+        if (!f) S.codes.push({ c: v, color: chosen });
+        sel = v;
+      }
+      save(); render();
+    } });
+    modal(old ? 'Editar código' : 'Código de puerto', '<p>' + (isNA ? 'N/A es referencia: no cuenta como movimiento. Aquí solo puedes cambiar su color.' : 'Letras o números (máx. 4). Si ya existe, se cambia su color.') + '</p><input type="text" id="mi" maxlength="4" value="' + esc(old ? old.c : '') + '"' + (isNA ? ' readonly' : '') + '>' +
       '<div class="pv" id="pv"></div>' +
       '<label class="rl">Matiz<input type="range" id="ph" min="0" max="360" class="hue"></label>' +
       '<label class="rl">Saturación<input type="range" id="ps" min="0" max="100"></label>' +
       '<label class="rl">Luminosidad<input type="range" id="pl" min="0" max="100"></label>' +
-      '<label class="rl">Color en hexadecimal<input type="text" id="px" maxlength="7"></label>' + sw + '</div>', [
-      { t: 'Cancelar' },
-      { t: 'Guardar', cls: 'pri', fn: function () {
-        var v = $('mi').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        var chosen = $('modal')._v.color;
-        if (!v) { toast('Escribe un código'); return false; }
-        var f = false;
-        for (var j = 0; j < S.codes.length; j++) { if (S.codes[j].c === v) { S.codes[j].color = chosen; f = true; } }
-        if (!f) S.codes.push({ c: v, color: chosen });
-        sel = v; save(); render();
-      } }
-    ]);
-    $('modal')._v = { color: PRESET[0] };
-    setColor(PRESET[0], 'init');
+      '<label class="rl">Color en hexadecimal<input type="text" id="px" maxlength="7"></label>' + sw + '</div>', btns);
+    $('modal')._v = { color: start };
+    setColor(start, 'init');
   }
   /* ---------- Buques ---------- */
   function shipsModal() {
@@ -682,14 +740,20 @@
     if ((el = up(e.target, 'data-k'))) { if (lpF) { lpF = false; return; } tapCell(el.getAttribute('data-k')); return; }
     if ((el = up(e.target, 'data-tab'))) {
       tab = el.getAttribute('data-tab');
-      if (tab !== 'cap' && !sel) sel = S.codes[0].c;
+      editC = false;
+      if (tab !== 'cap' && (!sel || (tab === 'exp' && sel === NA))) sel = firstReal();
       render(); return;
     }
     if ((el = up(e.target, 'data-bay'))) { bay = el.getAttribute('data-bay'); render(); return; }
     if (up(e.target, 'data-addbay')) { addBay(); return; }
     if (up(e.target, 'data-editcells')) { editCells(); return; }
-    if ((el = up(e.target, 'data-code'))) { sel = el.getAttribute('data-code'); render(); return; }
-    if (up(e.target, 'data-addcode')) { addCode(); return; }
+    if ((el = up(e.target, 'data-code'))) {
+      var cd = el.getAttribute('data-code');
+      if (editC) { if (cd) codeModal(cd); return; }
+      sel = cd; render(); return;
+    }
+    if (up(e.target, 'data-addcode')) { codeModal(null); return; }
+    if (up(e.target, 'data-editc')) { editC = !editC; render(); return; }
     if (up(e.target, 'data-delbay')) {
       sure('Eliminar bahía ' + bay, 'Se borra su plan y sus cargas.', 'Eliminar', function () {
         var sh = SH(), k, p = bay + '|';

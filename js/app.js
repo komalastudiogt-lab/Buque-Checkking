@@ -7,7 +7,7 @@
   var tab = 'cap', bay = null, sel = '', tt = null;
 
   function mkShip(name) {
-    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [] };
+    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [], mk: {}, mx: {} };
   }
   function defaults() {
     var sh = mkShip('Mi buque');
@@ -30,6 +30,9 @@
     var sh = SH(), l = sh.log || [], r = [], i, e;
     for (i = 0; i < l.length; i++) { e = l[i]; if (e.a === 'D' ? sh.done[e.k] : sh.exp[e.k]) r.push(e); }
     sh.log = r;
+    var k;
+    if (sh.mk) { for (k in sh.mk) { if (!sh.imp[k]) delete sh.mk[k]; } }
+    if (sh.mx) { for (k in sh.mx) { if (!sh.exp[k]) delete sh.mx[k]; } }
   }
   function logAdd(a, k) {
     var sh = SH();
@@ -62,6 +65,16 @@
     for (var i = n - 1; i >= 0; i--) r.push(pad(on ? 82 + 2 * i : 2 * (i + 1)));
     return r;
   }
+  function tagStr(t) {
+    var o = '', a = 'RPVD', i;
+    for (i = 0; i < a.length; i++) { if (t.indexOf(a.charAt(i)) >= 0) o += a.charAt(i); }
+    return o;
+  }
+  var TAGS = { R: 'Reefer', P: 'Peligrosa', V: 'Vacío', D: 'Dañado' };
+  function ink(c) {
+    var r = parseInt(c.substr(1, 2), 16), g = parseInt(c.substr(3, 2), 16), b = parseInt(c.substr(5, 2), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? '#0b0f14' : '#ffffff';
+  }
   function lim(v, a, b, d) { v = parseInt(v, 10); return isNaN(v) ? d : Math.max(a, Math.min(b, v)); }
 
   /* ---------- Validación y migración ---------- */
@@ -89,6 +102,16 @@
       q = lg[i];
       if (q && (q.a === 'D' || q.a === 'C') && typeof q.t === 'number' && isFinite(q.t) && q.t > 0 && typeof q.k === 'string' && re.test(q.k)) {
         sh.log.push({ t: q.t, a: q.a, k: q.k, c: typeof q.c === 'string' ? q.c.slice(0, 4) : '' });
+      }
+    }
+    var mm = [['mk', x.mk, sh.imp], ['mx', x.mx, sh.exp]], z, src, tg, mo, mq;
+    for (z = 0; z < 2; z++) {
+      src = mm[z][1] || {};
+      for (k in src) {
+        mq = src[k];
+        if (!mq || typeof mq !== 'object' || !mm[z][2][k]) continue;
+        tg = tagStr(String(mq.t || '')); mo = String(mq.n || '').slice(0, 30);
+        if (tg || mo) sh[mm[z][0]][k] = { t: tg, n: mo };
       }
     }
     return sh;
@@ -191,20 +214,26 @@
     if (eraser) h += '<button type="button" class="chip era' + (sel === '' ? ' on' : '') + '" data-code="">Borrar</button>';
     for (var i = 0; i < S.codes.length; i++) {
       var c = S.codes[i];
-      h += '<button type="button" class="chip' + (sel === c.c ? ' on' : '') + '" style="background:' + c.color + '" data-code="' + esc(c.c) + '">' + esc(c.c) + '</button>';
+      h += '<button type="button" class="chip' + (sel === c.c ? ' on' : '') + '" style="background:' + c.color + ';color:' + ink(c.color) + '" data-code="' + esc(c.c) + '">' + esc(c.c) + '</button>';
     }
     return h + '<button type="button" class="chip add" data-addcode="1">+ Código</button></div>';
   }
   function renderTools() {
     var h = '', c = count(bay || null);
     if (tab === 'cap') {
-      h = '<p class="step">Paso 1: captura el plano</p>' + palette(true) + '<p class="hint">Elige un código y toca las celdas. Toca una celda del mismo código para quitarla.</p>';
+      h = '<p class="step">Paso 1: captura el plano</p>' + palette(true) + '<p class="hint">Elige un código y toca las celdas. Toca una celda del mismo código para quitarla. Mantén presionada una celda con contenedor para marcarla (reefer, peligrosa, vacío, dañado) o anotar.</p>';
     } else if (tab === 'des') {
-      h = '<p class="step">Paso 2: descarga</p><p class="hint">Toca un contenedor para marcarlo descargado. Tócalo otra vez para deshacer. Pendientes en esta bahía: <b>' + (c.p - c.d) + '</b></p>';
+      h = '<p class="step">Paso 2: descarga</p><p class="hint">Toca un contenedor para marcarlo descargado. Tócalo otra vez para deshacer. Pendientes en esta bahía: <b>' + (c.p - c.d) + '</b>. Mantén presionada una celda para marcas y notas.</p>';
     } else {
-      h = '<p class="step">Paso 3: carga</p>' + palette(false) + '<p class="hint">Elige el código y toca la celda donde cargaste. Atenuadas: siguen ocupadas. Punteadas: espacio liberado.</p>';
+      h = '<p class="step">Paso 3: carga</p>' + palette(false) + '<p class="hint">Elige el código y toca la celda donde cargaste. Atenuadas: siguen ocupadas. Punteadas: espacio liberado. Mantén presionada una celda cargada para marcas y notas.</p>';
     }
     $('tools').innerHTML = h;
+  }
+  function tagHtml(M, k) {
+    var m = M[k], t;
+    if (!m) return '';
+    t = m.t + (m.n ? '*' : '');
+    return t ? '<i class="tg">' + t + '</i>' : '';
   }
   function renderGrid() {
     var cfg = bcfg(bay), sh = SH();
@@ -212,7 +241,7 @@
       $('grid').innerHTML = '<div class="empty">Este buque aún no tiene bahías.<br><br><button type="button" class="btn pri" data-addbay="1">Agregar bahía</button></div>';
       return;
     }
-    var R = rowLabels(cfg.rows), secs = [['SOBRE CUBIERTA', tierLabels(true, cfg.on)], ['BAJO CUBIERTA', tierLabels(false, cfg.un)]];
+    var M = tab === 'exp' ? sh.mx : sh.mk, R = rowLabels(cfg.rows), secs = [['SOBRE CUBIERTA', tierLabels(true, cfg.on)], ['BAJO CUBIERTA', tierLabels(false, cfg.un)]];
     var h = '<div class="g' + (cfg.rows > 12 ? ' sm' : '') + '" style="grid-template-columns:24px repeat(' + R.length + ',minmax(0,1fr))"><div></div>', i, j, s, k, v, t;
     for (i = 0; i < R.length; i++) h += '<div class="ch">' + R[i] + '</div>';
     for (s = 0; s < 2; s++) {
@@ -233,9 +262,9 @@
             continue;
           }
           if (tab !== 'exp' && sh.done[k]) {
-            h += '<button type="button" class="c dn" style="border-color:' + col(v) + ';color:' + col(v) + '" data-k="' + k + '">' + CHK + '</button>';
+            h += '<button type="button" class="c dn" style="border-color:' + col(v) + ';color:' + col(v) + '" data-k="' + k + '">' + CHK + tagHtml(M, k) + '</button>';
           } else {
-            h += '<button type="button" class="c" style="background:' + col(v) + ';border-color:' + col(v) + '" data-k="' + k + '">' + esc(v) + '</button>';
+            h += '<button type="button" class="c" style="background:' + col(v) + ';border-color:' + col(v) + ';color:' + ink(col(v)) + '" data-k="' + k + '">' + esc(v) + tagHtml(M, k) + '</button>';
           }
         }
       }
@@ -248,7 +277,7 @@
     var t = count(null), h = '';
     h += '<div class="card"><h4>Totales - ' + esc(SH().name) + '</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
     h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b></p></div>';
-    h += logCard();
+    h += logCard() + marksCard();
     h += '<div class="card"><h4>Por bahía</h4>' + tabla() + '</div>';
     h += '<div class="card"><h4>Archivos</h4><button type="button" class="btn pri blk" data-act="pdf">Compartir resumen en PDF</button>' +
       '<button type="button" class="btn blk" data-act="bak">Guardar respaldo (JSON)</button>' +
@@ -302,6 +331,34 @@
     }
     return h + '</table></div>';
   }
+  function marksRows() {
+    var sh = SH(), rows = [], k, m, z, M, names;
+    for (z = 0; z < 2; z++) {
+      M = z ? sh.mx : sh.mk;
+      for (k in M) {
+        m = M[k]; names = [];
+        for (var i = 0; i < m.t.length; i++) names.push(TAGS[m.t.charAt(i)]);
+        rows.push([z ? 'Carga' : 'Plano', k.split('|'), names.join(', '), m.n]);
+      }
+    }
+    return rows;
+  }
+  function marksHTML(max) {
+    var rows = marksRows(), h, i, p;
+    if (!rows.length) return '';
+    h = '<table class="t2"><tr><th>Fase</th><th>Bahía</th><th>Celda</th><th>Marcas</th><th>Nota</th></tr>';
+    for (i = 0; i < rows.length && (!max || i < max); i++) {
+      p = rows[i][1];
+      h += '<tr><td>' + rows[i][0] + '</td><td>' + esc(p[0]) + '</td><td>' + p[1] + '-' + p[2] + '</td><td>' + esc(rows[i][2]) + '</td><td>' + esc(rows[i][3]) + '</td></tr>';
+    }
+    h += '</table>';
+    if (max && rows.length > max) h += '<p class="hint">Se muestran ' + max + ' de ' + rows.length + '. El PDF trae todas.</p>';
+    return h;
+  }
+  function marksCard() {
+    var h = marksHTML(25);
+    return h ? '<div class="card"><h4>Marcas y notas</h4>' + h + '</div>' : '';
+  }
   function tabla() {
     var b = SH().bays;
     if (!b.length) return '<p class="hint">Sin bahías.</p>';
@@ -328,6 +385,22 @@
       if (sh.exp[k]) { delete sh.exp[k]; vib('aviso'); } else { sh.exp[k] = sel || S.codes[0].c; logAdd('C', k); vib('exito'); }
     }
     save(); render();
+  }
+  function cellDetails(k) {
+    var sh = SH(), ex = tab === 'exp', has = ex ? sh.exp[k] : sh.imp[k];
+    if (tab === 'res') return;
+    if (!has) { toast('Primero coloca un contenedor en la celda'); return; }
+    var M = ex ? sh.mx : sh.mk, cur = M[k] || { t: '', n: '' }, v = { t: cur.t }, p = k.split('|'), g = '', a;
+    for (a in TAGS) { g += '<button type="button" class="tgb' + (v.t.indexOf(a) >= 0 ? ' on' : '') + '" data-tg="' + a + '">' + TAGS[a] + '</button>'; }
+    modal('Bahía ' + p[0] + ' - celda ' + p[1] + '-' + p[2], '<p>Contenedor ' + esc(has) + '</p><div class="tgs">' + g + '</div><input type="text" id="mi" maxlength="30" placeholder="Nota o número de contenedor" value="' + esc(cur.n) + '">', [
+      { t: 'Cancelar' },
+      { t: 'Guardar', cls: 'pri', fn: function () {
+        var t = tagStr(v.t), n = $('mi').value.trim().slice(0, 30);
+        if (!t && !n) delete M[k]; else M[k] = { t: t, n: n };
+        save(); render();
+      } }
+    ]);
+    $('modal')._v = v;
   }
   function addBay() {
     ask('Nueva bahía', 'Solo números o letras sin acentos (ejemplo: 02)', '', function (v) {
@@ -388,15 +461,51 @@
       ]);
     $('modal')._v = v;
   }
+  function hex2hsl(hex) {
+    var r = parseInt(hex.substr(1, 2), 16) / 255, g = parseInt(hex.substr(3, 2), 16) / 255, b = parseInt(hex.substr(5, 2), 16) / 255;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn, h = 0, sa = 0;
+    if (d) {
+      sa = d / (1 - Math.abs(2 * l - 1));
+      if (mx === r) h = ((g - b) / d) % 6; else if (mx === g) h = (b - r) / d + 2; else h = (r - g) / d + 4;
+      h *= 60; if (h < 0) h += 360;
+    }
+    return [Math.round(h), Math.round(sa * 100), Math.round(l * 100)];
+  }
+  function hsl2hex(h, sa, l) {
+    sa /= 100; l /= 100;
+    var a = sa * Math.min(l, 1 - l);
+    function f(n) {
+      var k = (n + h / 30) % 12, c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+      return ('0' + Math.round(255 * c).toString(16)).slice(-2);
+    }
+    return '#' + f(0) + f(8) + f(4);
+  }
+  function setColor(hex, src) {
+    var m = $('modal');
+    if (!m._v || !$('pv')) return;
+    hex = hex.toLowerCase();
+    m._v.color = hex;
+    $('pv').style.background = hex;
+    var hs = hex2hsl(hex);
+    if (src !== 'sl') { $('ph').value = hs[0]; $('ps').value = hs[1]; $('pl').value = hs[2]; }
+    if (src !== 'hex') $('px').value = hex;
+    var H = $('ph').value, SA = $('ps').value, L = $('pl').value;
+    $('ps').style.background = 'linear-gradient(to right,hsl(' + H + ',0%,' + L + '%),hsl(' + H + ',100%,' + L + '%))';
+    $('pl').style.background = 'linear-gradient(to right,#000,hsl(' + H + ',' + SA + '%,50%),#fff)';
+  }
   function addCode() {
     var sw = '<div class="sws">';
-    for (var i = 0; i < PRESET.length; i++) sw += '<button type="button" class="' + (i === 0 ? 'on' : '') + '" style="background:' + PRESET[i] + '" data-sw="' + PRESET[i] + '"></button>';
-    modal('Código de puerto', '<p>Letras o números (máx. 4). Si ya existe, se cambia su color.</p><input type="text" id="mi" maxlength="4">' + sw + '</div>', [
+    for (var i = 0; i < PRESET.length; i++) sw += '<button type="button" style="background:' + PRESET[i] + '" data-sw="' + PRESET[i] + '"></button>';
+    modal('Código de puerto', '<p>Letras o números (máx. 4). Si ya existe, se cambia su color.</p><input type="text" id="mi" maxlength="4">' +
+      '<div class="pv" id="pv"></div>' +
+      '<label class="rl">Matiz<input type="range" id="ph" min="0" max="360" class="hue"></label>' +
+      '<label class="rl">Saturación<input type="range" id="ps" min="0" max="100"></label>' +
+      '<label class="rl">Luminosidad<input type="range" id="pl" min="0" max="100"></label>' +
+      '<label class="rl">Color en hexadecimal<input type="text" id="px" maxlength="7"></label>' + sw + '</div>', [
       { t: 'Cancelar' },
       { t: 'Guardar', cls: 'pri', fn: function () {
         var v = $('mi').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-        var on = document.querySelector('.sws button.on');
-        var chosen = on ? on.getAttribute('data-sw') : PRESET[0];
+        var chosen = $('modal')._v.color;
         if (!v) { toast('Escribe un código'); return false; }
         var f = false;
         for (var j = 0; j < S.codes.length; j++) { if (S.codes[j].c === v) { S.codes[j].color = chosen; f = true; } }
@@ -404,6 +513,8 @@
         sel = v; save(); render();
       } }
     ]);
+    $('modal')._v = { color: PRESET[0] };
+    setColor(PRESET[0], 'init');
   }
   /* ---------- Buques ---------- */
   function shipsModal() {
@@ -473,7 +584,7 @@
     var t = count(null), box = $('pdfbox');
     box.innerHTML = '<div style="background:#fff;color:#000;padding:20px;font-family:sans-serif"><h2 style="margin:0">' + esc(SH().name) + '</h2><p>Resumen de operación - ' + stamp() +
       '</p><p><b>Plan:</b> ' + t.p + ' &nbsp; <b>Descargados:</b> ' + t.d + ' &nbsp; <b>Pendientes:</b> ' + (t.p - t.d) + ' &nbsp; <b>Cargados:</b> ' + t.l + ' &nbsp; <b>Movimientos:</b> ' + (t.d + t.l) + '</p>' +
-      pdfT(tabla()) + pdfLog() + '</div>';
+      pdfT(tabla()) + pdfLog() + (marksHTML(0) ? '<h3>Marcas y notas</h3>' + pdfT(marksHTML(0)) : '') + '</div>';
     var name = 'BuqueChecking_' + stamp() + '.pdf';
     window.html2pdf().from(box.firstChild).set({ margin: 8, jsPDF: { unit: 'mm', format: 'a4' } }).outputPdf('datauristring').then(function (u) {
       var b64 = u.split(',')[1];
@@ -508,14 +619,41 @@
     }
     return null;
   }
+  var lpT = null, lpF = false;
+  function lpCancel() { clearTimeout(lpT); }
+  document.addEventListener('pointerdown', function (e) {
+    lpF = false; clearTimeout(lpT);
+    var el = up(e.target, 'data-k');
+    if (!el || !$('modal').hidden) return;
+    var k = el.getAttribute('data-k');
+    lpT = setTimeout(function () { lpF = true; vib('aviso'); cellDetails(k); }, 550);
+  });
+  document.addEventListener('pointerup', lpCancel);
+  document.addEventListener('pointercancel', lpCancel);
+  document.addEventListener('scroll', lpCancel, true);
+  document.addEventListener('contextmenu', function (e) {
+    var t = e.target;
+    if (!t || t.tagName !== 'INPUT') e.preventDefault();
+  });
+  document.addEventListener('input', function (e) {
+    var m = $('modal'), id = e.target.id;
+    if (m.hidden || !m._v || !m._v.color) return;
+    if (id === 'ph' || id === 'ps' || id === 'pl') setColor(hsl2hex(+$('ph').value, +$('ps').value, +$('pl').value), 'sl');
+    else if (id === 'px') {
+      var v = e.target.value.trim();
+      if (v.charAt(0) !== '#') v = '#' + v;
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) setColor(v, 'hex');
+    }
+  });
   var STEP = { rows: [1, 16], on: [0, 8], un: [0, 10] };
   document.addEventListener('click', function (e) {
     var el, m = $('modal');
     if (!m.hidden) {
-      if ((el = up(e.target, 'data-sw'))) {
-        var all = document.querySelectorAll('.sws button');
-        for (var i = 0; i < all.length; i++) all[i].className = '';
-        el.className = 'on'; return;
+      if ((el = up(e.target, 'data-sw'))) { setColor(el.getAttribute('data-sw'), 'sw'); return; }
+      if ((el = up(e.target, 'data-tg')) && m._v) {
+        var tc = el.getAttribute('data-tg'), on = m._v.t.indexOf(tc) < 0;
+        m._v.t = on ? m._v.t + tc : m._v.t.replace(tc, '');
+        el.className = 'tgb' + (on ? ' on' : ''); return;
       }
       if ((el = up(e.target, 'data-step')) && m._v) {
         var p = el.getAttribute('data-step').split(','), L = STEP[p[0]];
@@ -541,7 +679,7 @@
       }
       return;
     }
-    if ((el = up(e.target, 'data-k'))) { tapCell(el.getAttribute('data-k')); return; }
+    if ((el = up(e.target, 'data-k'))) { if (lpF) { lpF = false; return; } tapCell(el.getAttribute('data-k')); return; }
     if ((el = up(e.target, 'data-tab'))) {
       tab = el.getAttribute('data-tab');
       if (tab !== 'cap' && !sel) sel = S.codes[0].c;

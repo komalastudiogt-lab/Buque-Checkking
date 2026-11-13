@@ -293,7 +293,7 @@
     var t = count(null), h = '';
     h += '<div class="card"><h4>Totales - ' + esc(SH().name) + '</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
     h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b>' + (t.na ? ' - Contenedores N/A (no se mueven): <b>' + t.na + '</b>' : '') + '</p></div>';
-    h += cutsCard() + logCard() + marksCard();
+    h += cutsCard() + marksCard();
     h += '<div class="card"><h4>Por bahía</h4>' + tabla() + '</div>';
     h += '<div class="card"><h4>Archivos</h4><button type="button" class="btn pri blk" data-act="pdf">Compartir resumen en PDF</button>' +
       '<button type="button" class="btn blk" data-act="bak">Guardar respaldo (JSON)</button>' +
@@ -301,6 +301,7 @@
     h += '<div class="card"><h4>Ajustes</h4><div class="row"><span>Vibrar al marcar</span><button type="button" class="sw' + (S.vib ? ' on' : '') + '" data-act="vib" aria-label="Vibración"></button></div>' +
       '<button type="button" class="btn blk" data-act="vtest">Probar vibración</button>' +
       '<button type="button" class="btn blk" data-act="ships">Cambiar o agregar buque</button>' +
+      '<button type="button" class="btn blk" data-act="dep">Depurar este buque (nueva operación)</button>' +
       '<button type="button" class="btn blk" data-act="name">Renombrar este buque</button>' +
       '<button type="button" class="btn dan blk" data-act="wipe">Borrar todo</button></div>';
     $('res').innerHTML = h;
@@ -629,8 +630,26 @@
     for (i = 0; i < S.ships.length; i++) {
       h += '<button type="button" class="btn blk' + (S.ships[i].id === S.cur ? ' pri' : '') + '" data-ship="' + esc(S.ships[i].id) + '">' + esc(S.ships[i].name) + '</button>';
     }
-    h += '<button type="button" class="btn blk" data-shipact="ren">Renombrar este buque</button><button type="button" class="btn dan blk" data-shipact="del">Eliminar este buque</button>';
+    h += '<button type="button" class="btn blk" data-shipact="ren">Renombrar este buque</button><button type="button" class="btn blk" data-shipact="dep">Depurar este buque (nueva operación)</button><button type="button" class="btn dan blk" data-shipact="del">Eliminar este buque</button>';
     modal('Buques', h, [{ t: 'Cerrar' }, { t: 'Nuevo buque', cls: 'pri', fn: function () { newShip(); return false; } }]);
+  }
+  function depurar() {
+    var sh = SH(), c = count(null);
+    modal('Depurar ' + sh.name, '<p>Conserva el buque, sus bahías y la configuración de celdas. Operación actual: ' + c.p + ' en plano, ' + c.d + ' descargados, ' + c.l + ' cargados.</p>' +
+      '<button type="button" class="btn blk" data-dep="all">Empezar de cero (borrar plano, descargas, cargas, marcas y cortes)</button>' +
+      '<button type="button" class="btn blk" data-dep="keep">Dejar lo que sigue a bordo como plano nuevo (lo no descargado y lo cargado)</button>',
+      [{ t: 'Cancelar' }]);
+  }
+  function doDepurar(w) {
+    var sh = SH(), k, ni = {}, nm = {}, n;
+    if (w === 'keep') {
+      for (k in sh.imp) { if (sh.imp[k] === NA || !sh.done[k]) { ni[k] = sh.imp[k]; if (sh.mk[k]) nm[k] = sh.mk[k]; } }
+      for (k in sh.exp) { ni[k] = sh.exp[k]; if (sh.mx[k]) nm[k] = sh.mx[k]; else delete nm[k]; }
+    }
+    sh.imp = ni; sh.mk = nm; sh.done = {}; sh.exp = {}; sh.mx = {}; sh.log = []; sh.cuts = [];
+    n = 0; for (k in ni) { if (ni[k] !== NA) n++; }
+    tab = 'cap'; save(); render();
+    toast(w === 'keep' ? 'Plano nuevo: ' + n + ' contenedores a bordo' : 'Buque listo para una operación nueva');
   }
   function newShip() {
     ask('Nuevo buque', 'Nombre del buque', '', function (v) {
@@ -691,7 +710,7 @@
     var t = count(null), box = $('pdfbox');
     box.innerHTML = '<div style="background:#fff;color:#000;padding:20px;font-family:sans-serif"><h2 style="margin:0">' + esc(SH().name) + '</h2><p>Resumen de operación - ' + stamp() +
       '</p><p><b>Plan:</b> ' + t.p + ' &nbsp; <b>Descargados:</b> ' + t.d + ' &nbsp; <b>Pendientes:</b> ' + (t.p - t.d) + ' &nbsp; <b>Cargados:</b> ' + t.l + ' &nbsp; <b>Movimientos:</b> ' + (t.d + t.l) + '</p>' +
-      pdfT(tabla()) + ((SH().cuts || []).length ? '<h3>Cortes de hora</h3>' + pdfT(cutsTable()) : '') + pdfLog() + (marksHTML(0) ? '<h3>Marcas y notas</h3>' + pdfT(marksHTML(0)) : '') + '</div>';
+      pdfT(tabla()) + ((SH().cuts || []).length ? '<h3>Cortes de hora</h3>' + pdfT(cutsTable()) : '') + (marksHTML(0) ? '<h3>Marcas y notas</h3>' + pdfT(marksHTML(0)) : '') + '</div>';
     var name = 'BuqueChecking_' + stamp() + '.pdf';
     window.html2pdf().from(box.firstChild).set({ margin: 8, jsPDF: { unit: 'mm', format: 'a4' } }).outputPdf('datauristring').then(function (u) {
       var b64 = u.split(',')[1];
@@ -716,6 +735,7 @@
       window.NativeHaptics('prueba').then(function (r) { toast(r === 'ok' ? 'Vibración enviada' : r); });
     } else if (a === 'ships') shipsModal();
     else if (a === 'name') renameShip();
+    else if (a === 'dep') depurar();
     else if (a === 'wipe') {
       sure('Borrar todo', 'Se borrarán todos los buques, bahías, planes y cargas. No se puede deshacer.', 'Borrar', function () {
         S = defaults(); bay = null; sel = S.codes[0].c; save(); render();
@@ -780,8 +800,16 @@
         bay = SH().bays.length ? SH().bays[0].id : null;
         save(); closeModal(); render(); return;
       }
+      if ((el = up(e.target, 'data-dep'))) {
+        var w = el.getAttribute('data-dep');
+        sure(w === 'all' ? 'Empezar de cero' : 'Plano nuevo con lo que sigue a bordo',
+          w === 'all' ? 'Se borran plano, descargas, cargas, marcas y cortes de este buque. Se conservan sus bahías y celdas.' : 'Lo no descargado y lo cargado pasa a ser el plano nuevo. Se reinician descargas, cargas, marcas anteriores y cortes. Se conservan las bahías.',
+          'Aceptar', function () { doDepurar(w); });
+        return;
+      }
       if ((el = up(e.target, 'data-shipact'))) {
-        if (el.getAttribute('data-shipact') === 'ren') renameShip(); else delShip();
+        var sa = el.getAttribute('data-shipact');
+        if (sa === 'ren') renameShip(); else if (sa === 'dep') depurar(); else delShip();
         return;
       }
       if ((el = up(e.target, 'data-mb')) && m._b) {

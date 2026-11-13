@@ -92,3 +92,7 @@ input.hue{background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00
 .cutb b{color:#0b0f14;font-size:17px}
 .seq{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .seq span{background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;font-size:20px;font-weight:800;color:var(--ac)}
+.pb{display:flex;gap:8px;align-items:center;margin:8px 0}
+.pb input[type=text]{flex:1;min-width:0;padding:8px}
+.pb small{color:var(--mu);white-space:nowrap}
+.pb .tgb{padding:8px 10px}

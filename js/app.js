@@ -8,7 +8,7 @@
   var tab = 'cap', bay = null, sel = '', tt = null;
 
   function mkShip(name) {
-    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [], mk: {}, mx: {} };
+    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [], mk: {}, mx: {}, cuts: [] };
   }
   function defaults() {
     var sh = mkShip('Mi buque');
@@ -104,6 +104,11 @@
       if (q && (q.a === 'D' || q.a === 'C') && typeof q.t === 'number' && isFinite(q.t) && q.t > 0 && typeof q.k === 'string' && re.test(q.k)) {
         sh.log.push({ t: q.t, a: q.a, k: q.k, c: typeof q.c === 'string' ? q.c.slice(0, 4) : '' });
       }
+    }
+    var cu = Array.isArray(x.cuts) ? x.cuts : [];
+    for (i = 0; i < cu.length && sh.cuts.length < 500; i++) {
+      q = cu[i];
+      if (q && isFinite(q.from) && isFinite(q.to) && q.from > 0 && q.to > 0) sh.cuts.push({ from: +q.from, to: +q.to, d: lim(q.d, 0, 99999, 0), c: lim(q.c, 0, 99999, 0) });
     }
     var mm = [['mk', x.mk, sh.imp], ['mx', x.mx, sh.exp]], z, src, tg, mo, mq;
     for (z = 0; z < 2; z++) {
@@ -201,7 +206,7 @@
   function render() {
     var c = count(null);
     $('ttl').textContent = SH().name;
-    $('cnt').innerHTML = '<span class="okc">Desc.<br><b>' + c.d + '</b>/' + c.p + '</span><span>Carg.<br><b>' + c.l + '</b></span>';
+    $('cnt').innerHTML = '<button type="button" class="cutb" data-act="cut">Corte<br><b>' + sinceCut() + '</b></button><span class="okc">Desc.<br><b>' + c.d + '</b>/' + c.p + '</span><span>Carg.<br><b>' + c.l + '</b></span>';
     var navb = document.querySelectorAll('nav button');
     for (var i = 0; i < navb.length; i++) { navb[i].className = navb[i].getAttribute('data-tab') === tab ? 'on' : ''; }
     var r = tab === 'res';
@@ -288,7 +293,7 @@
     var t = count(null), h = '';
     h += '<div class="card"><h4>Totales - ' + esc(SH().name) + '</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
     h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b>' + (t.na ? ' - Contenedores N/A (no se mueven): <b>' + t.na + '</b>' : '') + '</p></div>';
-    h += logCard() + marksCard();
+    h += cutsCard() + logCard() + marksCard();
     h += '<div class="card"><h4>Por bahía</h4>' + tabla() + '</div>';
     h += '<div class="card"><h4>Archivos</h4><button type="button" class="btn pri blk" data-act="pdf">Compartir resumen en PDF</button>' +
       '<button type="button" class="btn blk" data-act="bak">Guardar respaldo (JSON)</button>' +
@@ -299,6 +304,50 @@
       '<button type="button" class="btn blk" data-act="name">Renombrar este buque</button>' +
       '<button type="button" class="btn dan blk" data-act="wipe">Borrar todo</button></div>';
     $('res').innerHTML = h;
+  }
+  function hhd(t) { var d = new Date(t); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + hh(t); }
+  function period(a, b) {
+    var x = new Date(a), y = new Date(b);
+    return hhd(a) + ' - ' + (x.toDateString() === y.toDateString() ? hh(b) : hhd(b));
+  }
+  function sinceCut() {
+    var sh = SH(), cs = sh.cuts || [], l = sh.log || [], n = 0, i, t;
+    if (!cs.length) { t = count(null); return t.d + t.l; }
+    for (i = 0; i < l.length; i++) { if (l[i].t > cs[cs.length - 1].to) n++; }
+    return n;
+  }
+  function cutNow() {
+    var sh = SH(), l = sh.log || [], now = Date.now(), d = 0, c = 0, i, from, t, cs;
+    if (!sh.cuts) sh.cuts = [];
+    cs = sh.cuts;
+    if (cs.length) {
+      from = cs[cs.length - 1].to;
+      for (i = 0; i < l.length; i++) { if (l[i].t > from && l[i].t <= now) { if (l[i].a === 'D') d++; else c++; } }
+    } else {
+      t = count(null); d = t.d; c = t.l;
+      from = now;
+      for (i = 0; i < l.length; i++) { if (l[i].t < from) from = l[i].t; }
+    }
+    if (d + c === 0) { toast(cs.length ? 'Sin movimientos desde el último corte' : 'Aún no hay movimientos'); vib('aviso'); return; }
+    cs.push({ from: from, to: now, d: d, c: c });
+    if (cs.length > 500) cs.splice(0, cs.length - 500);
+    save(); vib('exito'); render();
+    toast('Corte: ' + (d + c) + ' movimientos (' + period(from, now) + ')');
+  }
+  function cutsTable() {
+    var cs = SH().cuts || [], h = '<table class="t2"><tr><th>#</th><th>Periodo</th><th>Mov.</th><th>Desc.</th><th>Carg.</th></tr>', i, tot = 0;
+    for (i = 0; i < cs.length; i++) {
+      h += '<tr><td>' + (i + 1) + '</td><td>' + period(cs[i].from, cs[i].to) + '</td><td><b>' + (cs[i].d + cs[i].c) + '</b></td><td>' + cs[i].d + '</td><td>' + cs[i].c + '</td></tr>';
+      tot += cs[i].d + cs[i].c;
+    }
+    return h + '<tr><td></td><td>Total</td><td><b>' + tot + '</b></td><td></td><td></td></tr></table>';
+  }
+  function cutsCard() {
+    var cs = SH().cuts || [], h = '<div class="card"><h4>Cortes de hora</h4>', i;
+    if (!cs.length) return h + '<p class="hint">Aún no hay cortes. Toca el botón Corte de arriba al terminar cada periodo.</p></div>';
+    h += '<div class="seq">';
+    for (i = 0; i < cs.length; i++) h += '<span>' + (cs[i].d + cs[i].c) + '</span>';
+    return h + '</div>' + cutsTable() + '<button type="button" class="btn blk" data-act="uncut">Eliminar último corte</button></div>';
   }
   function hh(t) { var d = new Date(t); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
   function dur(h) { var m = Math.round(h * 60); return Math.floor(m / 60) + ' h ' + pad(m % 60) + ' min'; }
@@ -642,7 +691,7 @@
     var t = count(null), box = $('pdfbox');
     box.innerHTML = '<div style="background:#fff;color:#000;padding:20px;font-family:sans-serif"><h2 style="margin:0">' + esc(SH().name) + '</h2><p>Resumen de operación - ' + stamp() +
       '</p><p><b>Plan:</b> ' + t.p + ' &nbsp; <b>Descargados:</b> ' + t.d + ' &nbsp; <b>Pendientes:</b> ' + (t.p - t.d) + ' &nbsp; <b>Cargados:</b> ' + t.l + ' &nbsp; <b>Movimientos:</b> ' + (t.d + t.l) + '</p>' +
-      pdfT(tabla()) + pdfLog() + (marksHTML(0) ? '<h3>Marcas y notas</h3>' + pdfT(marksHTML(0)) : '') + '</div>';
+      pdfT(tabla()) + ((SH().cuts || []).length ? '<h3>Cortes de hora</h3>' + pdfT(cutsTable()) : '') + pdfLog() + (marksHTML(0) ? '<h3>Marcas y notas</h3>' + pdfT(marksHTML(0)) : '') + '</div>';
     var name = 'BuqueChecking_' + stamp() + '.pdf';
     window.html2pdf().from(box.firstChild).set({ margin: 8, jsPDF: { unit: 'mm', format: 'a4' } }).outputPdf('datauristring').then(function (u) {
       var b64 = u.split(',')[1];
@@ -653,7 +702,12 @@
     }).catch(function () { toast('No se pudo crear el PDF'); });
   }
   function act(a) {
-    if (a === 'pdf') pdf();
+    if (a === 'cut') cutNow();
+    else if (a === 'uncut') {
+      var cs = SH().cuts || [], u = cs[cs.length - 1];
+      if (!u) return;
+      sure('Eliminar último corte', 'Se elimina el corte ' + period(u.from, u.to) + ' (' + (u.d + u.c) + ' movimientos).', 'Eliminar', function () { cs.pop(); save(); render(); });
+    } else if (a === 'pdf') pdf();
     else if (a === 'bak') backup();
     else if (a === 'res') $('file').click();
     else if (a === 'vib') { S.vib = !S.vib; save(); render(); }

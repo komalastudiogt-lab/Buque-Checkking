@@ -53,9 +53,12 @@ jobs:
           [ -f icon.png ] && cp icon.png www/icon.png || true
 
           npm init -y
-          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/filesystem@7 @capacitor/share@7 @capacitor/haptics@7 @capacitor/assets html2pdf.js@0.10.1 esbuild
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor/filesystem@7 @capacitor/share@7 @capacitor/haptics@7 @capacitor/assets html2pdf.js@0.10.1 pdfjs-dist@3.11.174 esbuild
 
           cp node_modules/html2pdf.js/dist/html2pdf.bundle.min.js www/js/html2pdf.js
+          cp node_modules/pdfjs-dist/build/pdf.min.js www/js/pdf.min.js
+          cp node_modules/pdfjs-dist/build/pdf.worker.min.js www/js/pdf.worker.min.js
+          test -s www/js/pdf.min.js && test -s www/js/pdf.worker.min.js || { echo "Falta el lector de PDF (pdfjs-dist)"; exit 1; }
 
           cat << 'EOF' > native-bridge.js
           import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';

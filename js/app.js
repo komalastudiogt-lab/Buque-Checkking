@@ -233,8 +233,8 @@
     h += '</div><div class="acts"><button type="button" class="mini" data-find="1">Buscar código</button>' +
       '<button type="button" class="mini" data-addcode="1">+ Código</button>' +
       '<button type="button" class="mini' + (editC ? ' on' : '') + '" data-editc="1">' + (editC ? 'Listo' : 'Editar') + '</button>' +
-      (editC ? '<button type="button" class="mini" data-order="1">Ordenar</button>' : '') + '</div>';
-    return h + (editC ? '<p class="hint">Modo edición: toca un código para cambiar su nombre o color, o eliminarlo. "Ordenar" cambia su posición.</p>' : '');
+      '</div>';
+    return h;
   }
   function findList(q) {
     q = q.toUpperCase().trim();
@@ -250,27 +250,13 @@
   }
   function findModal() {
     modal(editC ? 'Elegir código para editar' : 'Buscar código', '<input type="text" id="qs" maxlength="4" placeholder="Escribe el código"><div class="pickgrid" id="pg">' + findList('') + '</div>', [{ t: 'Cerrar' }]);
-  }
-  function orderModal() {
-    var h = '', i, c;
-    for (i = 0; i < S.codes.length; i++) {
-      c = S.codes[i];
-      h += '<div class="or"><span class="chip" style="background:' + c.color + ';color:' + ink(c.color) + '">' + esc(c.c) + '</span><span class="ob">' +
-        '<button type="button" class="mini" data-mv="' + i + ',0">Inicio</button>' +
-        '<button type="button" class="mini" data-mv="' + i + ',-1">Subir</button>' +
-        '<button type="button" class="mini" data-mv="' + i + ',1">Bajar</button></span></div>';
-    }
-    modal('Ordenar códigos', '<p>Mueve cada código al lugar que quieras.</p>' + h, [{ t: 'Listo', cls: 'pri' }]);
+    setTimeout(function () { var a = document.activeElement; if (a && a.blur) a.blur(); }, 150);
   }
   function renderTools() {
     var h = '', c = count(bay || null);
-    if (tab === 'cap') {
-      h = '<p class="step">Paso 1: captura el plano</p>' + palette(true) + '<p class="hint">Elige un código y toca las celdas. Toca una celda del mismo código para quitarla o elige otro para cambiarla. N/A = contenedor que no se mueve (solo referencia). Mantén presionada una celda con contenedor para marcarla (reefer, peligrosa, vacío, dañado) o anotar.</p>';
-    } else if (tab === 'des') {
-      h = '<p class="step">Paso 2: descarga</p><p class="hint">Toca un contenedor para marcarlo descargado. Tócalo otra vez para deshacer. Pendientes en esta bahía: <b>' + (c.p - c.d) + '</b>. Mantén presionada una celda para marcas y notas.</p>';
-    } else {
-      h = '<p class="step">Paso 3: carga</p>' + palette(false) + '<p class="hint">Elige el código y toca la celda donde cargaste. Atenuadas: siguen ocupadas. Punteadas: espacio liberado. Mantén presionada una celda cargada para marcas y notas.</p>';
-    }
+    if (tab === 'cap') h = '<p class="step">Paso 1: captura el plano</p>' + palette(true);
+    else if (tab === 'des') h = '<p class="step">Paso 2: descarga - pendientes en esta bahía: <b>' + (c.p - c.d) + '</b></p>';
+    else h = '<p class="step">Paso 3: carga</p>' + palette(false);
     $('tools').innerHTML = h;
   }
   function tagHtml(M, k) {
@@ -331,7 +317,10 @@
       '<button type="button" class="btn blk" data-act="ships">Cambiar o agregar buque</button>' +
       '<button type="button" class="btn blk" data-act="dep">Depurar este buque (nueva operación)</button>' +
       '<button type="button" class="btn blk" data-act="name">Renombrar este buque</button>' +
-      '<button type="button" class="btn dan blk" data-act="wipe">Borrar todo</button></div>';
+      '<button type="button" class="btn dan blk" data-act="wipe">Borrar todo</button></div>' +
+      '<div class="card"><h4>Ayuda rápida</h4><p class="hint">Paso 1: elige un código y toca las celdas. Tocar el mismo código quita la celda; elegir otro la cambia. N/A es un contenedor que no se mueve.<br><br>' +
+      'Paso 2: toca un contenedor para marcarlo descargado; otra vez para deshacer.<br><br>Paso 3: elige el código y toca donde cargaste.<br><br>' +
+      'Mantén presionada una celda con contenedor para marcas y notas. Mantén presionado un código y arrástralo para moverlo de lugar.</p></div>';
     $('res').innerHTML = h;
   }
   function hhd(t) { var d = new Date(t); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + ' ' + hh(t); }
@@ -806,6 +795,134 @@
       if (/^#[0-9a-fA-F]{6}$/.test(v)) setColor(v, 'hex');
     }
   });
+  /* ---------- Arrastrar códigos para ordenarlos ---------- */
+  var dg = null, dgb = null, dgT = null, dgS = null, dgSup = false;
+  function applyOrder(vis) {
+    var inV = {}, byC = {}, out = [], i, k = 0, n = 0;
+    vis.forEach(function (c) { inV[c] = 1; });
+    S.codes.forEach(function (c) { byC[c.c] = c; if (inV[c.c]) n++; });
+    if (n !== vis.length) return;
+    for (i = 0; i < S.codes.length; i++) { out.push(inV[S.codes[i].c] ? byC[vis[k++]] : S.codes[i]); }
+    S.codes = out; save(); render();
+    if ($('pg') && !$('modal').hidden) $('pg').innerHTML = findList($('qs') ? $('qs').value : '');
+  }
+  function startDrag(chip, x, y) {
+    var r = chip.getBoundingClientRect(), cl = chip.cloneNode(true);
+    cl.removeAttribute('data-pick');
+    cl.className = 'chip dragc';
+    cl.style.left = r.left + 'px'; cl.style.top = r.top + 'px'; cl.style.width = r.width + 'px'; cl.style.height = r.height + 'px';
+    document.body.appendChild(cl);
+    chip.classList.add('ghost');
+    dg = { chip: chip, cl: cl, ox: x - r.left, oy: y - r.top };
+    vib('suave');
+  }
+  function moveDrag(x, y) {
+    var pg = $('pg'), pr, chips, i, c, r, cx, cy, d, bd = 1e12, best = null, br = null;
+    dg.cl.style.left = (x - dg.ox) + 'px'; dg.cl.style.top = (y - dg.oy) + 'px';
+    if (!pg) return;
+    pr = pg.getBoundingClientRect();
+    if (y < pr.top + 26) pg.scrollTop -= 10; else if (y > pr.bottom - 26) pg.scrollTop += 10;
+    chips = pg.querySelectorAll('[data-pick]');
+    for (i = 0; i < chips.length; i++) {
+      c = chips[i];
+      if (c === dg.chip) continue;
+      r = c.getBoundingClientRect(); cx = (r.left + r.right) / 2; cy = (r.top + r.bottom) / 2;
+      d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+      if (d < bd) { bd = d; best = c; br = r; }
+    }
+    if (!best) return;
+    if (y > br.bottom || (y >= br.top && x > (br.left + br.right) / 2)) pg.insertBefore(dg.chip, best.nextSibling);
+    else pg.insertBefore(dg.chip, best);
+  }
+  function endDrag() {
+    var d = dg, pg = $('pg'), chips, order = [], i;
+    dg = null;
+    if (d.cl.parentNode) d.cl.parentNode.removeChild(d.cl);
+    d.chip.classList.remove('ghost');
+    dgSup = true; setTimeout(function () { dgSup = false; }, 400);
+    if (!pg) return;
+    chips = pg.querySelectorAll('[data-pick]');
+    for (i = 0; i < chips.length; i++) order.push(chips[i].getAttribute('data-pick'));
+    applyOrder(order);
+    vib('exito');
+  }
+  function startBarDrag(chip, x, y) {
+    var r = chip.getBoundingClientRect(), cl = chip.cloneNode(true);
+    cl.className = 'chip dragc';
+    cl.style.left = r.left + 'px'; cl.style.top = r.top + 'px'; cl.style.width = r.width + 'px'; cl.style.height = r.height + 'px';
+    document.body.appendChild(cl);
+    chip.classList.add('ghost');
+    dgb = { chip: chip, cl: cl, ox: x - r.left, oy: y - r.top, x: x, y: y, iv: null };
+    dgb.iv = setInterval(function () { if (dgb) moveBarDrag(dgb.x, dgb.y, true); }, 40);
+    vib('suave');
+  }
+  function moveBarDrag(x, y, tick) {
+    var pal = $('tools').querySelector('.pal'), pr, chips, i, c, r, ref = null;
+    dgb.x = x; dgb.y = y;
+    dgb.cl.style.left = (x - dgb.ox) + 'px'; dgb.cl.style.top = (y - dgb.oy) + 'px';
+    if (!pal) return;
+    pr = pal.getBoundingClientRect();
+    if (x < pr.left + 40) pal.scrollLeft -= 12; else if (x > pr.right - 40) pal.scrollLeft += 12;
+    chips = pal.querySelectorAll('[data-code]');
+    for (i = 0; i < chips.length; i++) {
+      c = chips[i];
+      if (c === dgb.chip || !c.getAttribute('data-code')) continue;
+      r = c.getBoundingClientRect();
+      if (x < (r.left + r.right) / 2) { ref = c; break; }
+    }
+    if (ref) { if (dgb.chip.nextSibling !== ref) pal.insertBefore(dgb.chip, ref); }
+    else if (pal.lastChild !== dgb.chip) pal.appendChild(dgb.chip);
+  }
+  function endBarDrag() {
+    var d = dgb, pal = $('tools').querySelector('.pal'), chips, order = [], i;
+    dgb = null;
+    clearInterval(d.iv);
+    if (d.cl.parentNode) d.cl.parentNode.removeChild(d.cl);
+    d.chip.classList.remove('ghost');
+    dgSup = true; setTimeout(function () { dgSup = false; }, 400);
+    if (!pal) return;
+    chips = pal.querySelectorAll('[data-code]');
+    for (i = 0; i < chips.length; i++) { if (chips[i].getAttribute('data-code')) order.push(chips[i].getAttribute('data-code')); }
+    applyOrder(order);
+    vib('exito');
+  }
+  document.addEventListener('touchstart', function (e) {
+    clearTimeout(dgT); dgS = null;
+    var m = $('modal'), el, t, pal;
+    if (dg || dgb || !e.touches || e.touches.length !== 1) return;
+    t = e.touches[0];
+    if (m.hidden) {
+      el = up(e.target, 'data-code');
+      if (!el || !el.getAttribute('data-code') || tab === 'res') return;
+      pal = $('tools').querySelector('.pal');
+      if (!pal || !pal.contains(el)) return;
+      dgS = { x: t.clientX, y: t.clientY, el: el, bar: true };
+    } else {
+      el = up(e.target, 'data-pick');
+      if (!el || !$('pg') || !$('pg').contains(el)) return;
+      if ($('qs') && $('qs').value) return;
+      dgS = { x: t.clientX, y: t.clientY, el: el, bar: false };
+    }
+    dgT = setTimeout(function () {
+      if (!dgS) return;
+      var q = dgS; dgS = null;
+      if (q.bar) startBarDrag(q.el, q.x, q.y); else startDrag(q.el, q.x, q.y);
+    }, 380);
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    var t = e.touches && e.touches[0];
+    if (!t) return;
+    if (dg) { if (e.cancelable) e.preventDefault(); moveDrag(t.clientX, t.clientY); return; }
+    if (dgb) { if (e.cancelable) e.preventDefault(); moveBarDrag(t.clientX, t.clientY); return; }
+    if (dgS && (Math.abs(t.clientX - dgS.x) > 10 || Math.abs(t.clientY - dgS.y) > 10)) { clearTimeout(dgT); dgS = null; }
+  }, { passive: false });
+  function endTouch(e) {
+    clearTimeout(dgT); dgS = null;
+    if (dg) { if (e.cancelable) e.preventDefault(); endDrag(); }
+    else if (dgb) { if (e.cancelable) e.preventDefault(); endBarDrag(); }
+  }
+  document.addEventListener('touchend', endTouch, { passive: false });
+  document.addEventListener('touchcancel', endTouch, { passive: false });
   var STEP = { rows: [1, 16], on: [0, 8], un: [0, 10] };
   document.addEventListener('click', function (e) {
     var el, m = $('modal');
@@ -830,19 +947,11 @@
         save(); closeModal(); render(); return;
       }
       if ((el = up(e.target, 'data-pick'))) {
+        if (dgSup) return;
         var pc = el.getAttribute('data-pick');
         closeModal();
         if (editC) codeModal(pc); else { sel = pc; render(); }
         return;
-      }
-      if ((el = up(e.target, 'data-mv'))) {
-        var mp = el.getAttribute('data-mv').split(','), ix = +mp[0], to = +mp[1] === 0 ? 0 : ix + (+mp[1]);
-        if (to < 0 || to >= S.codes.length || to === ix) return;
-        var mb = m.firstChild, st = mb ? mb.scrollTop : 0, it = S.codes.splice(ix, 1)[0];
-        S.codes.splice(to, 0, it);
-        save(); orderModal();
-        if (m.firstChild) m.firstChild.scrollTop = st;
-        render(); return;
       }
       if ((el = up(e.target, 'data-dep'))) {
         var w = el.getAttribute('data-dep');
@@ -875,12 +984,12 @@
     if (up(e.target, 'data-editcells')) { editCells(); return; }
     if ((el = up(e.target, 'data-code'))) {
       var cd = el.getAttribute('data-code');
+      if (dgSup) return;
       if (editC) { if (cd) codeModal(cd); return; }
       sel = cd; render(); return;
     }
     if (up(e.target, 'data-addcode')) { codeModal(null); return; }
     if (up(e.target, 'data-find')) { findModal(); return; }
-    if (up(e.target, 'data-order')) { orderModal(); return; }
     if (up(e.target, 'data-editc')) { editC = !editC; render(); return; }
     if (up(e.target, 'data-delbay')) {
       sure('Eliminar bahía ' + bay, 'Se borra su plan y sus cargas.', 'Eliminar', function () {

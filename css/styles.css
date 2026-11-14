@@ -99,3 +99,5 @@ input.hue{background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00
 #qs{text-transform:uppercase}
 .or{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0}
 .ob{display:flex;gap:6px}
+.chip.ghost{opacity:.3;outline:2px dashed var(--ac)}
+.dragc{position:fixed;z-index:200;pointer-events:none;transform:scale(1.15);box-shadow:0 10px 24px rgba(0,0,0,.7);margin:0;opacity:.95}

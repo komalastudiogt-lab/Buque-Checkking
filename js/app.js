@@ -8,7 +8,7 @@
   var tab = 'cap', bay = null, sel = '', tt = null;
 
   function mkShip(name) {
-    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [], mk: {}, mx: {}, cuts: [] };
+    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [], mk: {}, mx: {}, cuts: [], hat: [] };
   }
   function defaults() {
     var sh = mkShip('Mi buque');
@@ -109,6 +109,12 @@
     for (i = 0; i < cu.length && sh.cuts.length < 500; i++) {
       q = cu[i];
       if (q && isFinite(q.from) && isFinite(q.to) && q.from > 0 && q.to > 0) sh.cuts.push({ from: +q.from, to: +q.to, d: lim(q.d, 0, 99999, 0), c: lim(q.c, 0, 99999, 0) });
+    }
+    var hl = Array.isArray(x.hat) ? x.hat : [], hq;
+    for (i = 0; i < hl.length && sh.hat.length < 2000; i++) {
+      hq = hl[i];
+      if (!hq || typeof hq !== 'object') continue;
+      sh.hat.push({ b: (hq && typeof hq.b === 'string') ? hq.b.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) : '' });
     }
     var mm = [['mk', x.mk, sh.imp], ['mx', x.mx, sh.exp]], z, src, tg, mo, mq;
     for (z = 0; z < 2; z++) {
@@ -252,11 +258,46 @@
     modal(editC ? 'Elegir código para editar' : 'Buscar código', '<input type="text" id="qs" maxlength="4" placeholder="Escribe el código"><div class="pickgrid" id="pg">' + findList('') + '</div>', [{ t: 'Cerrar' }]);
     setTimeout(function () { var a = document.activeElement; if (a && a.blur) a.blur(); }, 150);
   }
+  function hatBtn() {
+    return '<button type="button" class="tapb" data-act="tap">Tapaderas <b>' + ((SH().hat || []).length) + '</b><span>+1</span></button>';
+  }
+  function hatAdd() {
+    var sh = SH();
+    if (!sh.hat) sh.hat = [];
+    sh.hat.push({ b: bay || '' });
+    if (sh.hat.length > 2000) sh.hat.shift();
+    save(); vib('exito'); render();
+    toast('Tapadera registrada: ' + sh.hat.length + (bay ? ' (bahía ' + bay + ')' : ''));
+  }
+  function hatUndo() {
+    var sh = SH();
+    if (!sh.hat || !sh.hat.length) { toast('No hay movimientos de tapaderas'); return; }
+    sure('Quitar último movimiento', 'Se quita el último movimiento de tapadera registrado.', 'Quitar', function () { sh.hat.pop(); save(); render(); });
+  }
+  function hatTable() {
+    var h = SH().hat || [], by = {}, ks = [], i, t;
+    if (!h.length) return '';
+    for (i = 0; i < h.length; i++) { t = h[i].b || '-'; if (!by[t]) { by[t] = 0; ks.push(t); } by[t]++; }
+    t = '<table class="t2"><tr><th>Bahía</th><th>Movimientos</th></tr>';
+    for (i = 0; i < ks.length; i++) t += '<tr><td>' + esc(ks[i] === '-' ? 'Sin bahía' : ks[i]) + '</td><td>' + by[ks[i]] + '</td></tr>';
+    return t + '</table>';
+  }
+  function hatCard() {
+    var n = (SH().hat || []).length, t = hatTable();
+    return '<div class="card"><h4>Tapaderas</h4><div class="big"><div><b>' + n + '</b>Movimientos</div></div>' + t +
+      '<button type="button" class="btn pri blk" data-act="tap">Registrar movimiento (+1)</button>' +
+      (n ? '<button type="button" class="btn blk" data-act="untap">Quitar el último</button>' : '') +
+      '<p class="hint">Se anota en la bahía que tengas seleccionada. Si ya se hizo, también puedes registrarlo después.</p></div>';
+  }
+  function pdfHat() {
+    var n = (SH().hat || []).length;
+    return n ? '<h3>Tapaderas</h3><p>Movimientos de tapaderas: <b>' + n + '</b></p>' + pdfT(hatTable()) : '';
+  }
   function renderTools() {
     var h = '', c = count(bay || null);
     if (tab === 'cap') h = '<p class="step">Paso 1: captura el plano</p>' + palette(true);
-    else if (tab === 'des') h = '<p class="step">Paso 2: descarga - pendientes en esta bahía: <b>' + (c.p - c.d) + '</b></p>';
-    else h = '<p class="step">Paso 3: carga</p>' + palette(false);
+    else if (tab === 'des') h = '<div class="stepbar"><p class="step">Paso 2: descarga - pendientes: <b>' + (c.p - c.d) + '</b></p>' + hatBtn() + '</div>';
+    else h = '<div class="stepbar"><p class="step">Paso 3: carga</p>' + hatBtn() + '</div>' + palette(false);
     $('tools').innerHTML = h;
   }
   function tagHtml(M, k) {
@@ -306,8 +347,8 @@
   function renderRes() {
     var t = count(null), h = '';
     h += '<div class="card"><h4>Totales - ' + esc(SH().name) + '</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
-    h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b>' + (t.na ? ' - Contenedores N/A (no se mueven): <b>' + t.na + '</b>' : '') + '</p></div>';
-    h += cutsCard() + marksCard();
+    h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b>' + (t.na ? ' - Contenedores N/A (no se mueven): <b>' + t.na + '</b>' : '') + ((SH().hat || []).length ? ' - Tapaderas: <b>' + SH().hat.length + '</b>' : '') + '</p></div>';
+    h += cutsCard() + hatCard() + marksCard();
     h += '<div class="card"><h4>Por bahía</h4>' + tabla() + '</div>';
     h += '<div class="card"><h4>Archivos</h4><button type="button" class="btn pri blk" data-act="pdf">Compartir resumen en PDF</button>' +
       '<button type="button" class="btn blk" data-act="bak">Guardar respaldo (JSON)</button>' +
@@ -642,12 +683,21 @@
     setColor(start, 'init');
   }
   /* ---------- Buques ---------- */
+  function shipInfo(sh) {
+    var k, n = 0;
+    for (k in sh.imp) { if (sh.imp[k] !== NA) n++; }
+    return sh.bays.length + (sh.bays.length === 1 ? ' bahía' : ' bahías') + ' - ' + n + ' en plano';
+  }
   function shipsModal() {
-    var h = '', i;
+    var h = '<div class="lbl">Tus buques</div>', i, sh;
     for (i = 0; i < S.ships.length; i++) {
-      h += '<button type="button" class="btn blk' + (S.ships[i].id === S.cur ? ' pri' : '') + '" data-ship="' + esc(S.ships[i].id) + '">' + esc(S.ships[i].name) + '</button>';
+      sh = S.ships[i];
+      h += '<button type="button" class="ship' + (sh.id === S.cur ? ' on' : '') + '" data-ship="' + esc(sh.id) + '"><span><span class="sn">' + esc(sh.name) + '</span><span class="sm">' + shipInfo(sh) + '</span></span><i class="ck"></i></button>';
     }
-    h += '<button type="button" class="btn blk" data-shipact="ren">Renombrar este buque</button><button type="button" class="btn blk" data-shipact="dep">Depurar este buque (nueva operación)</button><button type="button" class="btn dan blk" data-shipact="del">Eliminar este buque</button>';
+    h += '<div class="lbl">Buque actual: ' + esc(SH().name) + '</div><div class="sact">' +
+      '<button type="button" class="mini" data-shipact="ren">Renombrar</button>' +
+      '<button type="button" class="mini" data-shipact="dep">Depurar</button>' +
+      '<button type="button" class="mini dng" data-shipact="del">Eliminar buque</button></div>';
     modal('Buques', h, [{ t: 'Cerrar' }, { t: 'Nuevo buque', cls: 'pri', fn: function () { newShip(); return false; } }]);
   }
   function depurar() {
@@ -663,7 +713,7 @@
       for (k in sh.imp) { if (sh.imp[k] === NA || !sh.done[k]) { ni[k] = sh.imp[k]; if (sh.mk[k]) nm[k] = sh.mk[k]; } }
       for (k in sh.exp) { ni[k] = sh.exp[k]; if (sh.mx[k]) nm[k] = sh.mx[k]; else delete nm[k]; }
     }
-    sh.imp = ni; sh.mk = nm; sh.done = {}; sh.exp = {}; sh.mx = {}; sh.log = []; sh.cuts = [];
+    sh.imp = ni; sh.mk = nm; sh.done = {}; sh.exp = {}; sh.mx = {}; sh.log = []; sh.cuts = []; sh.hat = [];
     n = 0; for (k in ni) { if (ni[k] !== NA) n++; }
     tab = 'cap'; save(); render();
     toast(w === 'keep' ? 'Plano nuevo: ' + n + ' contenedores a bordo' : 'Buque listo para una operación nueva');
@@ -727,7 +777,7 @@
     var t = count(null), box = $('pdfbox');
     box.innerHTML = '<div style="background:#fff;color:#000;padding:20px;font-family:sans-serif"><h2 style="margin:0">' + esc(SH().name) + '</h2><p>Resumen de operación - ' + stamp() +
       '</p><p><b>Plan:</b> ' + t.p + ' &nbsp; <b>Descargados:</b> ' + t.d + ' &nbsp; <b>Pendientes:</b> ' + (t.p - t.d) + ' &nbsp; <b>Cargados:</b> ' + t.l + ' &nbsp; <b>Movimientos:</b> ' + (t.d + t.l) + '</p>' +
-      pdfT(tabla()) + ((SH().cuts || []).length ? '<h3>Cortes de hora</h3>' + pdfT(cutsTable()) : '') + (marksHTML(0) ? '<h3>Marcas y notas</h3>' + pdfT(marksHTML(0)) : '') + '</div>';
+      pdfT(tabla()) + ((SH().cuts || []).length ? '<h3>Cortes de hora</h3>' + pdfT(cutsTable()) : '') + pdfHat() + (marksHTML(0) ? '<h3>Marcas y notas</h3>' + pdfT(marksHTML(0)) : '') + '</div>';
     var name = 'BuqueChecking_' + stamp() + '.pdf';
     window.html2pdf().from(box.firstChild).set({ margin: 8, jsPDF: { unit: 'mm', format: 'a4' } }).outputPdf('datauristring').then(function (u) {
       var b64 = u.split(',')[1];
@@ -739,6 +789,8 @@
   }
   function act(a) {
     if (a === 'cut') cutNow();
+    else if (a === 'tap') hatAdd();
+    else if (a === 'untap') hatUndo();
     else if (a === 'uncut') {
       var cs = SH().cuts || [], u = cs[cs.length - 1];
       if (!u) return;
@@ -1009,7 +1061,20 @@
     this.value = '';
   });
 
+  function decorateNav() {
+    var I = {
+      cap: '<path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/>',
+      des: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
+      exp: '<path d="M12 20V9M7 13l5-5 5 5M5 4h14"/>',
+      res: '<path d="M5 20V10M12 20V4M19 20v-7"/>'
+    }, L = { cap: 'Plano', des: 'Descarga', exp: 'Carga', res: 'Resumen' }, b = document.querySelectorAll('nav button'), i, t;
+    for (i = 0; i < b.length; i++) {
+      t = b[i].getAttribute('data-tab');
+      if (I[t]) b[i].innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + I[t] + '</svg><span>' + L[t] + '</span>';
+    }
+  }
   load();
+  decorateNav();
   render();
   window.__appListo = true;
 })();

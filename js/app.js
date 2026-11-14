@@ -61,9 +61,9 @@
     for (i = 0; i < e; i++) r.push(pad(i * 2 + 1));
     return r;
   }
-  function tierLabels(on, n, s0) {
+  function tierLabels(on, n) {
     var r = [];
-    for (var i = n - 1; i >= 0; i--) r.push(pad(on ? (s0 === 80 ? 80 : 82) + 2 * i : 2 * (i + 1)));
+    for (var i = n - 1; i >= 0; i--) r.push(pad(on ? 82 + 2 * i : 2 * (i + 1)));
     return r;
   }
   function tagStr(t) {
@@ -88,11 +88,11 @@
     if (typeof x.id === 'string' && /^[A-Za-z0-9]{1,20}$/.test(x.id)) sh.id = x.id;
     var i, k, ids = [], bl = Array.isArray(x.bays) ? x.bays : [];
     for (i = 0; i < bl.length; i++) {
-      var b = bl[i], id, rows = DEF.rows, on = DEF.on, un = DEF.un, s0 = 82;
-      if (b && typeof b === 'object') { id = b.id; rows = lim(b.rows, 1, 16, DEF.rows); on = lim(b.on, 0, 8, DEF.on); un = lim(b.un, 0, 10, DEF.un); s0 = b.s0 === 80 ? 80 : 82; }
+      var b = bl[i], id, rows = DEF.rows, on = DEF.on, un = DEF.un;
+      if (b && typeof b === 'object') { id = b.id; rows = lim(b.rows, 1, 16, DEF.rows); on = lim(b.on, 0, 8, DEF.on); un = lim(b.un, 0, 10, DEF.un); }
       else id = b;
       id = String(id).replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
-      if (id && ids.indexOf(id) < 0) { ids.push(id); sh.bays.push({ id: id, rows: rows, on: on, un: un, s0: s0 }); }
+      if (id && ids.indexOf(id) < 0) { ids.push(id); sh.bays.push({ id: id, rows: rows, on: on, un: un }); }
     }
     var re = /^[A-Za-z0-9]{1,8}\|\d\d\|\d\d$/, im = x.imp || {}, dn = x.done || {}, ex = x.exp || {};
     for (k in im) { if (re.test(k) && ids.indexOf(k.split('|')[0]) >= 0 && typeof im[k] === 'string') sh.imp[k] = im[k].slice(0, 4); }
@@ -230,9 +230,37 @@
       if (tab === 'exp' && c.c === NA) continue;
       h += '<button type="button" class="chip' + (sel === c.c && !editC ? ' on' : '') + '" style="background:' + c.color + ';color:' + ink(c.color) + '" data-code="' + esc(c.c) + '">' + esc(c.c) + '</button>';
     }
-    h += '<button type="button" class="chip add" data-addcode="1">+ Código</button>' +
-      '<button type="button" class="chip add' + (editC ? ' on' : '') + '" data-editc="1">' + (editC ? 'Listo' : 'Editar') + '</button></div>';
-    return h + (editC ? '<p class="hint">Modo edición: toca un código para cambiar su nombre o color, o eliminarlo.</p>' : '');
+    h += '</div><div class="acts"><button type="button" class="mini" data-find="1">Buscar código</button>' +
+      '<button type="button" class="mini" data-addcode="1">+ Código</button>' +
+      '<button type="button" class="mini' + (editC ? ' on' : '') + '" data-editc="1">' + (editC ? 'Listo' : 'Editar') + '</button>' +
+      (editC ? '<button type="button" class="mini" data-order="1">Ordenar</button>' : '') + '</div>';
+    return h + (editC ? '<p class="hint">Modo edición: toca un código para cambiar su nombre o color, o eliminarlo. "Ordenar" cambia su posición.</p>' : '');
+  }
+  function findList(q) {
+    q = q.toUpperCase().trim();
+    var h = '', n = 0, i, c;
+    for (i = 0; i < S.codes.length; i++) {
+      c = S.codes[i];
+      if (tab === 'exp' && c.c === NA) continue;
+      if (q && c.c.indexOf(q) < 0) continue;
+      h += '<button type="button" class="chip" style="background:' + c.color + ';color:' + ink(c.color) + '" data-pick="' + esc(c.c) + '">' + esc(c.c) + '</button>';
+      n++;
+    }
+    return n ? h : '<p class="hint">Sin resultados</p>';
+  }
+  function findModal() {
+    modal(editC ? 'Elegir código para editar' : 'Buscar código', '<input type="text" id="qs" maxlength="4" placeholder="Escribe el código"><div class="pickgrid" id="pg">' + findList('') + '</div>', [{ t: 'Cerrar' }]);
+  }
+  function orderModal() {
+    var h = '', i, c;
+    for (i = 0; i < S.codes.length; i++) {
+      c = S.codes[i];
+      h += '<div class="or"><span class="chip" style="background:' + c.color + ';color:' + ink(c.color) + '">' + esc(c.c) + '</span><span class="ob">' +
+        '<button type="button" class="mini" data-mv="' + i + ',0">Inicio</button>' +
+        '<button type="button" class="mini" data-mv="' + i + ',-1">Subir</button>' +
+        '<button type="button" class="mini" data-mv="' + i + ',1">Bajar</button></span></div>';
+    }
+    modal('Ordenar códigos', '<p>Mueve cada código al lugar que quieras.</p>' + h, [{ t: 'Listo', cls: 'pri' }]);
   }
   function renderTools() {
     var h = '', c = count(bay || null);
@@ -254,10 +282,10 @@
   function renderGrid() {
     var cfg = bcfg(bay), sh = SH();
     if (!cfg) {
-      $('grid').innerHTML = '<div class="empty">Este buque aún no tiene bahías.<br><br><button type="button" class="btn pri blk" data-act="impl">Importar plano (PDF)</button><button type="button" class="btn blk" data-addbay="1">Agregar bahía a mano</button></div>';
+      $('grid').innerHTML = '<div class="empty">Este buque aún no tiene bahías.<br><br><button type="button" class="btn pri" data-addbay="1">Agregar bahía</button></div>';
       return;
     }
-    var M = tab === 'exp' ? sh.mx : sh.mk, R = rowLabels(cfg.rows), secs = [['SOBRE CUBIERTA', tierLabels(true, cfg.on, cfg.s0)], ['BAJO CUBIERTA', tierLabels(false, cfg.un)]];
+    var M = tab === 'exp' ? sh.mx : sh.mk, R = rowLabels(cfg.rows), secs = [['SOBRE CUBIERTA', tierLabels(true, cfg.on)], ['BAJO CUBIERTA', tierLabels(false, cfg.un)]];
     var h = '<div class="g' + (cfg.rows > 12 ? ' sm' : '') + '" style="grid-template-columns:24px repeat(' + R.length + ',minmax(0,1fr))"><div></div>', i, j, s, k, v, t;
     for (i = 0; i < R.length; i++) h += '<div class="ch">' + R[i] + '</div>';
     for (s = 0; s < 2; s++) {
@@ -285,7 +313,7 @@
         }
       }
     }
-    h += '</div>' + (tab === 'cap' ? '<button type="button" class="btn pri blk" data-act="impl">Importar plano (PDF)</button>' : '') + '<button type="button" class="btn blk" data-editcells="1">Editar celdas de la bahía ' + esc(bay) + '</button>' +
+    h += '</div><button type="button" class="btn blk" data-editcells="1">Editar celdas de la bahía ' + esc(bay) + '</button>' +
       '<button type="button" class="btn blk" data-delbay="1">Eliminar bahía ' + esc(bay) + '</button>';
     $('grid').innerHTML = h;
   }
@@ -470,12 +498,12 @@
       if (!v) { toast('Escribe un número de bahía'); return false; }
       if (bcfg(v)) { toast('Esa bahía ya existe'); return false; }
       var base = bcfg(bay) || DEF;
-      SH().bays.push({ id: v, rows: base.rows, on: base.on, un: base.un, s0: base.s0 === 80 ? 80 : 82 });
+      SH().bays.push({ id: v, rows: base.rows, on: base.on, un: base.un });
       sortBays(); bay = v; save(); render();
     });
   }
   function validKeys(v, id) {
-    var o = {}, R = rowLabels(v.rows), T = tierLabels(true, v.on, v.s0).concat(tierLabels(false, v.un)), i, j;
+    var o = {}, R = rowLabels(v.rows), T = tierLabels(true, v.on).concat(tierLabels(false, v.un)), i, j;
     for (i = 0; i < R.length; i++) { for (j = 0; j < T.length; j++) o[id + '|' + R[i] + '|' + T[j]] = 1; }
     return o;
   }
@@ -494,21 +522,20 @@
       ok = validKeys(v, ids[i]);
       for (k in sh.imp) { if (k.indexOf(ids[i] + '|') === 0 && !ok[k]) { delete sh.imp[k]; delete sh.done[k]; } }
       for (k in sh.exp) { if (k.indexOf(ids[i] + '|') === 0 && !ok[k]) delete sh.exp[k]; }
-      c = bcfg(ids[i]); c.rows = v.rows; c.on = v.on; c.un = v.un; c.s0 = v.s0 === 80 ? 80 : 82;
+      c = bcfg(ids[i]); c.rows = v.rows; c.on = v.on; c.un = v.un;
     }
     save(); render();
   }
   function editCells() {
     var c = bcfg(bay);
     if (!c) return;
-    var v = { rows: c.rows, on: c.on, un: c.un, s0: c.s0 === 80 ? 80 : 82, all: false };
+    var v = { rows: c.rows, on: c.on, un: c.un, all: false };
     function line(lbl, key) {
       return '<div class="stp"><span>' + lbl + '</span><span><button type="button" data-step="' + key + ',-1">-</button><b id="sv_' + key + '">' + v[key] + '</b><button type="button" data-step="' + key + ',1">+</button></span></div>';
     }
     modal('Celdas de la bahía ' + bay,
-      '<p>Filas: si el número es impar incluye la 00 (13 = 12 a 02, 00, 01 a 11; 14 = 14 a 02, 01 a 13). Pisos: sobre cubierta desde 82 (o 80 si lo activas), bajo cubierta desde 02.</p>' +
+      '<p>Filas: si el número es impar incluye la 00 (13 = 12 a 02, 00, 01 a 11; 14 = 14 a 02, 01 a 13). Pisos: sobre cubierta desde 82, bajo cubierta desde 02.</p>' +
       line('Filas', 'rows') + line('Pisos sobre cubierta', 'on') + line('Pisos bajo cubierta', 'un') +
-      '<div class="row"><span>Cubierta empieza en el piso 80</span><button type="button" class="sw' + (v.s0 === 80 ? ' on' : '') + '" data-s0="1"></button></div>' +
       '<div class="row"><span>Aplicar a todas las bahías</span><button type="button" class="sw" data-stepall="1"></button></div>', [
         { t: 'Cancelar' },
         { t: 'Guardar', cls: 'pri', fn: function () {
@@ -737,289 +764,11 @@
     } else if (a === 'ships') shipsModal();
     else if (a === 'name') renameShip();
     else if (a === 'dep') depurar();
-    else if (a === 'impl') pickPlan();
     else if (a === 'wipe') {
       sure('Borrar todo', 'Se borrarán todos los buques, bahías, planes y cargas. No se puede deshacer.', 'Borrar', function () {
         S = defaults(); bay = null; sel = S.codes[0].c; save(); render();
       });
     }
-  }
-
-  /* ---------- Lector de planos PDF ---------- */
-  function pdfMedian(a) {
-    var b = a.slice().sort(function (x, y) { return x - y; });
-    return b.length ? b[Math.floor(b.length / 2)] : 0;
-  }
-  function pdfRows(list, tol) {
-    list = list.slice().sort(function (a, b) { return a.y - b.y; });
-    var rows = [], cur = null;
-    list.forEach(function (o) {
-      if (cur && o.y - cur.ys / cur.n.length <= tol) { cur.n.push(o); cur.ys += o.y; }
-      else { cur = { n: [o], ys: o.y }; rows.push(cur); }
-    });
-    return rows.map(function (r) { return { y: r.ys / r.n.length, items: r.n.sort(function (a, b) { return a.x - b.x; }) }; });
-  }
-  function pdfTokens(ch) {
-    var D = [], i, rows, toks = [];
-    for (i = 0; i < ch.length; i++) { if (ch[i].c >= '0' && ch[i].c <= '9') D.push(ch[i]); }
-    rows = pdfRows(D, 2.2);
-    rows.forEach(function (r) {
-      var cur = null;
-      r.items.forEach(function (o) {
-        if (cur && o.x - cur.last <= 5.5) { cur.s += o.c; cur.last = o.x; cur.xe = o.x; }
-        else { cur = { s: o.c, xs: o.x, xe: o.x, last: o.x, y: r.y }; toks.push(cur); }
-      });
-    });
-    toks.forEach(function (t) { t.x = (t.xs + t.xe) / 2; t.v = parseInt(t.s, 10); });
-    return toks;
-  }
-  function pdfKind(ch) {
-    var L = ch.filter(function (o) { return o.y < 70 && o.c >= 'A' && o.c <= 'Z'; }), rows = pdfRows(L, 3), i, s;
-    for (i = 0; i < rows.length; i++) {
-      s = rows[i].items.map(function (o) { return o.c; }).join('');
-      if (s.indexOf('IMPORT') >= 0) return 'imp';
-      if (s.indexOf('EXPORT') >= 0) return 'exp';
-    }
-    return '?';
-  }
-  function pdfPage(ch) {
-    var toks = pdfTokens(ch), out = { kind: pdfKind(ch), blocks: [] }, heads = [], i, j;
-    var byRow = pdfRows(toks, 2.5);
-    byRow.forEach(function (r) {
-      var t = r.items.filter(function (o) { return o.v <= 16; });
-      if (t.length < 7) return;
-      var gaps = [];
-      for (j = 1; j < t.length; j++) gaps.push(t[j].x - t[j - 1].x);
-      var med = pdfMedian(gaps), run = [t[0]];
-      var flush = function () {
-        if (run.length >= 7 && med >= 8 && med <= 16) heads.push({ y: r.y, toks: run, pitch: med, x0: run[0].x, x1: run[run.length - 1].x });
-      };
-      for (j = 1; j < t.length; j++) {
-        if (t[j].x - t[j - 1].x > med * 1.45) { flush(); run = [t[j]]; } else run.push(t[j]);
-      }
-      flush();
-    });
-    if (!heads.length) return out;
-    heads.sort(function (a, b) { return a.y - b.y || a.x0 - b.x0; });
-    var bands = [];
-    heads.forEach(function (h) {
-      var b = bands[bands.length - 1];
-      if (b && Math.abs(b.y - h.y) < 4) b.h.push(h); else bands.push({ y: h.y, h: [h] });
-    });
-    var Ltrs = ch.filter(function (o) { return o.c >= 'A' && o.c <= 'Z'; });
-    bands.forEach(function (b, bi) {
-      var yEnd = bi + 1 < bands.length ? bands[bi + 1].y - 3 : 1e9;
-      // filas de pisos: números pares en los márgenes (fuera de los bloques)
-      var cand = toks.filter(function (t) {
-        if (t.y <= b.y + 3 || t.y >= yEnd) return false;
-        if (!((t.v >= 80 && t.v <= 96) || (t.v >= 2 && t.v <= 20)) || t.v % 2) return false;
-        for (var k = 0; k < b.h.length; k++) { if (t.x > b.h[k].x0 - b.h[k].pitch * 0.6 && t.x < b.h[k].x1 + b.h[k].pitch * 0.6) return false; }
-        return true;
-      });
-      var tr = pdfRows(cand, 2.6).filter(function (r) { return r.items.length >= 2; }).map(function (r) {
-        var cnt = {}, best = 0, val = 0;
-        r.items.forEach(function (t) { cnt[t.v] = (cnt[t.v] || 0) + 1; if (cnt[t.v] > best) { best = cnt[t.v]; val = t.v; } });
-        return { y: r.y, v: val };
-      });
-      if (!tr.length) return;
-      var rp = []; for (j = 1; j < tr.length; j++) rp.push(tr[j].y - tr[j - 1].y);
-      var rowTol = Math.max(2.5, Math.min(4.5, (pdfMedian(rp) || 8) * 0.42));
-      b.h.forEach(function (h) {
-        var cols = h.toks.map(function (t) { return { x: t.x, lab: ('0' + t.v).slice(-2) }; });
-        var cells = {}, bad = 0, xs = 0, lo = h.x0 - h.pitch * 0.6, hi = h.x1 + h.pitch * 0.6, parts = {};
-        Ltrs.forEach(function (o) {
-          if (o.x < lo || o.x > hi || o.y < b.y + 3 || o.y >= yEnd + 3) return;
-          var r = -1, rd = 1e9, c = 0, cd = 1e9, k;
-          for (k = 0; k < tr.length; k++) { if (Math.abs(tr[k].y - o.y) < rd) { rd = Math.abs(tr[k].y - o.y); r = k; } }
-          if (r < 0 || rd > rowTol) return;
-          for (k = 0; k < cols.length; k++) { if (Math.abs(cols[k].x - o.x) < cd) { cd = Math.abs(cols[k].x - o.x); c = k; } }
-          var key = c + '|' + r;
-          (parts[key] = parts[key] || []).push(o);
-        });
-        var n = 0;
-        for (var key in parts) {
-          var p = parts[key].sort(function (a, c2) { return a.x - c2.x; }), t = p.map(function (o) { return o.c; }).join(''), ij = key.split('|');
-          if (t === 'X') { xs++; continue; }
-          if (!/^[A-Z]{1,3}$/.test(t)) { bad++; continue; }
-          cells[cols[+ij[0]].lab + '|' + ('0' + tr[+ij[1]].v).slice(-2)] = t; n++;
-        }
-        // nombre de la bahía: etiquetas "Bay NN" sobre el bloque
-        var labels = [];
-        ch.forEach(function (o, ix) {
-          if (o.c !== 'y' || ix < 2 || ch[ix - 1].c !== 'a' || ch[ix - 2].c !== 'B') return;
-          if (o.y > h.y - 3 || o.y < h.y - 45 || o.x < h.x0 - 20 || o.x > h.x1 + 8) return;
-          var num = toks.filter(function (t) { return Math.abs(t.y - o.y) < 3 && t.x > o.x && t.x - o.x < 18; }).sort(function (a, c2) { return a.x - c2.x; })[0];
-          if (num) labels.push(('0' + num.v).slice(-2));
-        });
-        var on = tr.filter(function (t) { return t.v >= 80; }).map(function (t) { return t.v; });
-        var un = tr.filter(function (t) { return t.v <= 20; }).map(function (t) { return t.v; });
-        var name = '', ev = labels.filter(function (l) { return parseInt(l, 10) % 2 === 0; });
-        if (ev.length) name = ev.slice().sort().pop(); else if (labels.length) name = labels.slice().sort().pop();
-        out.blocks.push({
-          band: bi + 1, x: Math.round(h.x0), labels: labels, name: name, rows: cols.length, cols: cols.map(function (c) { return c.lab; }),
-          s0: (on.length && Math.min.apply(null, on) === 80) ? 80 : 82, on: on.length ? (Math.max.apply(null, on) - ((on.length && Math.min.apply(null, on) === 80) ? 80 : 82)) / 2 + 1 : 0, un: un.length ? Math.max.apply(null, un) / 2 : 0,
-          cells: cells, n: n, xs: xs, bad: bad
-        });
-      });
-    });
-    return out;
-  }
-  function parsePlan(pages) {
-    var r = [];
-    for (var i = 0; i < pages.length; i++) r.push(pdfPage(pages[i].chars));
-    return r;
-  }
-
-  /* ---------- Importar plano ---------- */
-  function loadScript(src) {
-    return new Promise(function (res, rej) {
-      if (window.pdfjsLib) { res(); return; }
-      var s = document.createElement('script');
-      s.src = src; s.onload = function () { res(); };
-      s.onerror = function () { rej(new Error('script')); };
-      document.head.appendChild(s);
-    });
-  }
-  function readPdf(buf) {
-    return loadScript('./js/pdf.min.js').then(function () {
-      var L = window.pdfjsLib;
-      L.GlobalWorkerOptions.workerSrc = './js/pdf.worker.min.js';
-      return L.getDocument({ data: new Uint8Array(buf), isEvalSupported: false }).promise;
-    }).then(function (doc) {
-      var L = window.pdfjsLib, nums = [], n, tasks;
-      for (n = 1; n <= doc.numPages; n++) nums.push(n);
-      tasks = nums.map(function (num) {
-        return doc.getPage(num).then(function (pg) {
-          var vp = pg.getViewport({ scale: 1 });
-          return pg.getTextContent().then(function (tc) {
-            var ch = [];
-            tc.items.forEach(function (it) {
-              var s = it.str || '', len = s.length, k, tx, w;
-              if (!len) return;
-              tx = L.Util.transform(vp.transform, it.transform);
-              w = it.width > 0 ? it.width : len * 4;
-              for (k = 0; k < len; k++) {
-                if (s.charAt(k) === ' ') continue;
-                ch.push({ c: s.charAt(k), x: tx[4] + (k + 0.5) * w / len, y: tx[5] - (it.height || 8) * 0.35 });
-              }
-            });
-            return { chars: ch };
-          });
-        });
-      });
-      return Promise.all(tasks);
-    });
-  }
-  function planFromPdf(pages) {
-    var res = parsePlan(pages), any = false, blocks = [], seen = {};
-    res.forEach(function (p) { if (p.kind === 'imp') any = true; });
-    res.forEach(function (p) {
-      if (any ? p.kind !== 'imp' : p.kind === 'exp') return;
-      p.blocks.forEach(function (b) { if (b.n > 0) blocks.push(b); });
-    });
-    blocks.forEach(function (b) { if (seen[b.name]) b.name = ''; seen[b.name] = 1; });
-    return blocks;
-  }
-  function planFromJson(o) {
-    if (!o || o.plan !== 1 || !Array.isArray(o.bahias)) return null;
-    var out = [], i, k, b, id, cells, n, v, re = /^\d\d\|\d\d$/, rc = /^([A-Z]{1,4}|N\/A)$/;
-    for (i = 0; i < o.bahias.length; i++) {
-      b = o.bahias[i] || {};
-      id = String(b.id || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
-      cells = {}; n = 0;
-      for (k in (b.celdas || {})) {
-        v = String(b.celdas[k]).toUpperCase();
-        if (re.test(k) && rc.test(v)) { cells[k] = v; n++; }
-      }
-      if (id && n) out.push({ name: id, labels: [], rows: lim(b.filas, 1, 16, 11), s0: b.pisos_sobre_desde === 80 ? 80 : 82, on: lim(b.pisos_sobre, 0, 8, 5), un: lim(b.pisos_bajo, 0, 10, 6), cells: cells, n: n });
-    }
-    return out;
-  }
-  function openPlan(blocks) {
-    var tot = 0, codes = {}, nw = [], cl = [], i, k, known, h;
-    blocks.forEach(function (b) { tot += b.n; for (k in b.cells) codes[b.cells[k]] = (codes[b.cells[k]] || 0) + 1; });
-    for (k in codes) {
-      known = false;
-      for (i = 0; i < S.codes.length; i++) { if (S.codes[i].c === k) known = true; }
-      if (!known) nw.push(k);
-      cl.push(k + ' ' + codes[k]);
-    }
-    h = '<p>Se encontraron ' + blocks.length + ' bahías con ' + tot + ' contenedores. Revisa el nombre de cada bahía. Si una ya existe, su plano se reemplaza.</p>' +
-      '<p class="hint">' + esc(cl.join(' - ')) + (nw.length ? '. Códigos nuevos que se agregan: ' + esc(nw.join(', ')) : '') + '</p>';
-    blocks.forEach(function (b, ix) {
-      h += '<div class="pb"><button type="button" class="tgb on" data-pt="' + ix + '">Sí</button><input type="text" id="pn' + ix + '" maxlength="8" value="' + esc(b.name) + '"><small>' + b.n + ' cont.</small></div>';
-    });
-    modal('Importar plano', h, [{ t: 'Cancelar' }, { t: 'Importar', cls: 'pri', fn: function () {
-      var v = $('modal')._v, names = [], used = {}, picked = [], nm, j;
-      for (j = 0; j < v.pl.length; j++) {
-        if (!v.on[j]) continue;
-        nm = $('pn' + j).value.replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
-        if (!nm) { toast('Falta el nombre de una bahía'); return false; }
-        if (used[nm]) { toast('Hay nombres repetidos: ' + nm); return false; }
-        used[nm] = 1; picked.push(j); names[j] = nm;
-      }
-      if (!picked.length) { toast('No hay bahías seleccionadas'); return false; }
-      applyPlan(v.pl, picked, names);
-    } }]);
-    $('modal')._v = { pl: blocks, on: blocks.map(function () { return true; }) };
-    setTimeout(function () { var a = document.activeElement; if (a && a.blur) a.blur(); }, 150);
-  }
-  function applyPlan(pl, picked, names) {
-    var sh = SH(), n = 0, skip = 0, i, j, k, b, id, cfg, old, rl, key, ok, add = 0, first = null, c, found;
-    for (i = 0; i < picked.length; i++) {
-      b = pl[picked[i]]; id = names[picked[i]];
-      cfg = { id: id, rows: lim(b.rows, 1, 16, 11), on: lim(b.on, 0, 8, 5), un: lim(b.un, 0, 10, 6), s0: b.s0 === 80 ? 80 : 82 };
-      old = bcfg(id);
-      if (old) {
-        for (k in sh.imp) { if (k.indexOf(id + '|') === 0) { delete sh.imp[k]; delete sh.done[k]; } }
-        old.rows = cfg.rows; old.on = cfg.on; old.un = cfg.un; old.s0 = cfg.s0;
-      } else sh.bays.push(cfg);
-      ok = validKeys(cfg, id);
-      for (k in b.cells) {
-        rl = k.split('|'); key = id + '|' + rl[0] + '|' + rl[1];
-        if (!ok[key]) { skip++; continue; }
-        sh.imp[key] = b.cells[k]; n++;
-        found = false;
-        for (j = 0; j < S.codes.length; j++) { if (S.codes[j].c === b.cells[k]) found = true; }
-        if (!found && b.cells[k] !== NA) { S.codes.push({ c: b.cells[k], color: PRESET[(S.codes.length + add) % PRESET.length] }); add++; }
-      }
-      if (!first) first = id;
-    }
-    sortBays(); bay = first; tab = 'cap'; save(); render();
-    toast('Plano importado: ' + n + ' contenedores en ' + picked.length + ' bahías' + (skip ? ' (' + skip + ' celdas fuera de la bahía no se importaron)' : ''));
-  }
-  function importPlanFile(file) {
-    var nm = (file.name || '').toLowerCase(), fr = new FileReader();
-    if (/\.json$/.test(nm) || file.type === 'application/json') {
-      fr.onload = function () {
-        var o = null, b;
-        try { o = JSON.parse(fr.result); } catch (e) {}
-        b = planFromJson(o);
-        if (b && b.length) openPlan(b);
-        else toast(o && o.ships ? 'Ese archivo es un respaldo: usa Restaurar respaldo' : 'El archivo no tiene un plano válido');
-      };
-      fr.readAsText(file); return;
-    }
-    if (!(/\.pdf$/.test(nm) || file.type === 'application/pdf')) { toast('Elige un archivo PDF'); return; }
-    toast('Leyendo el PDF...');
-    fr.onload = function () {
-      readPdf(fr.result).then(function (pages) {
-        var b = planFromPdf(pages);
-        if (b.length) openPlan(b);
-        else toast('No encontré contenedores en este PDF. Si es una foto o un escaneo, mándasela a Claude para convertirla');
-      }).catch(function () { toast('No se pudo leer el PDF'); });
-    };
-    fr.readAsArrayBuffer(file);
-  }
-  function pickPlan() {
-    var f = document.createElement('input');
-    f.type = 'file'; f.accept = '.pdf,application/pdf,.json,application/json'; f.style.display = 'none';
-    f.addEventListener('change', function () {
-      var file = f.files && f.files[0];
-      if (file) importPlanFile(file);
-      if (f.parentNode) f.parentNode.removeChild(f);
-    });
-    document.body.appendChild(f); f.click();
   }
 
   /* ---------- Eventos ---------- */
@@ -1048,6 +797,7 @@
   });
   document.addEventListener('input', function (e) {
     var m = $('modal'), id = e.target.id;
+    if (!m.hidden && id === 'qs' && $('pg')) { $('pg').innerHTML = findList(e.target.value); return; }
     if (m.hidden || !m._v || !m._v.color) return;
     if (id === 'ph' || id === 'ps' || id === 'pl') setColor(hsl2hex(+$('ph').value, +$('ps').value, +$('pl').value), 'sl');
     else if (id === 'px') {
@@ -1071,9 +821,6 @@
         m._v[p[0]] = Math.max(L[0], Math.min(L[1], m._v[p[0]] + parseInt(p[1], 10)));
         $('sv_' + p[0]).textContent = m._v[p[0]]; return;
       }
-      if ((el = up(e.target, 'data-s0')) && m._v) {
-        m._v.s0 = m._v.s0 === 80 ? 82 : 80; el.className = 'sw' + (m._v.s0 === 80 ? ' on' : ''); return;
-      }
       if ((el = up(e.target, 'data-stepall')) && m._v) {
         m._v.all = !m._v.all; el.className = 'sw' + (m._v.all ? ' on' : ''); return;
       }
@@ -1082,10 +829,20 @@
         bay = SH().bays.length ? SH().bays[0].id : null;
         save(); closeModal(); render(); return;
       }
-      if ((el = up(e.target, 'data-pt')) && m._v && m._v.pl) {
-        var ix = +el.getAttribute('data-pt');
-        m._v.on[ix] = !m._v.on[ix];
-        el.className = 'tgb' + (m._v.on[ix] ? ' on' : ''); el.textContent = m._v.on[ix] ? 'Sí' : 'No'; return;
+      if ((el = up(e.target, 'data-pick'))) {
+        var pc = el.getAttribute('data-pick');
+        closeModal();
+        if (editC) codeModal(pc); else { sel = pc; render(); }
+        return;
+      }
+      if ((el = up(e.target, 'data-mv'))) {
+        var mp = el.getAttribute('data-mv').split(','), ix = +mp[0], to = +mp[1] === 0 ? 0 : ix + (+mp[1]);
+        if (to < 0 || to >= S.codes.length || to === ix) return;
+        var mb = m.firstChild, st = mb ? mb.scrollTop : 0, it = S.codes.splice(ix, 1)[0];
+        S.codes.splice(to, 0, it);
+        save(); orderModal();
+        if (m.firstChild) m.firstChild.scrollTop = st;
+        render(); return;
       }
       if ((el = up(e.target, 'data-dep'))) {
         var w = el.getAttribute('data-dep');
@@ -1122,6 +879,8 @@
       sel = cd; render(); return;
     }
     if (up(e.target, 'data-addcode')) { codeModal(null); return; }
+    if (up(e.target, 'data-find')) { findModal(); return; }
+    if (up(e.target, 'data-order')) { orderModal(); return; }
     if (up(e.target, 'data-editc')) { editC = !editC; render(); return; }
     if (up(e.target, 'data-delbay')) {
       sure('Eliminar bahía ' + bay, 'Se borra su plan y sus cargas.', 'Eliminar', function () {
@@ -1143,6 +902,5 @@
 
   load();
   render();
-  window.__bc = { parsePlan: parsePlan, planFromPdf: planFromPdf, openPlan: openPlan, importPlanFile: importPlanFile };
   window.__appListo = true;
 })();

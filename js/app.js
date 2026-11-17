@@ -8,7 +8,7 @@
   var tab = 'cap', bay = null, sel = '', tt = null;
 
   function mkShip(name) {
-    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [], mk: {}, mx: {}, cuts: [], hat: [] };
+    return { id: 's' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36), name: name, bays: [], imp: {}, done: {}, exp: {}, log: [], mk: {}, mx: {}, cuts: [], hat: [], esp: [] };
   }
   function defaults() {
     var sh = mkShip('Mi buque');
@@ -66,6 +66,12 @@
     for (var i = n - 1; i >= 0; i--) r.push(pad(on ? 82 + 2 * i : 2 * (i + 1)));
     return r;
   }
+  function hcStr(t) {
+    var o = '', a = 'BCE', i;
+    for (i = 0; i < a.length; i++) { if (t.indexOf(a.charAt(i)) >= 0) o += a.charAt(i); }
+    return o;
+  }
+  var HN = { B: 'Babor', C: 'Centro', E: 'Estribor' };
   function tagStr(t) {
     var o = '', a = 'RPVD', i;
     for (i = 0; i < a.length; i++) { if (t.indexOf(a.charAt(i)) >= 0) o += a.charAt(i); }
@@ -88,11 +94,11 @@
     if (typeof x.id === 'string' && /^[A-Za-z0-9]{1,20}$/.test(x.id)) sh.id = x.id;
     var i, k, ids = [], bl = Array.isArray(x.bays) ? x.bays : [];
     for (i = 0; i < bl.length; i++) {
-      var b = bl[i], id, rows = DEF.rows, on = DEF.on, un = DEF.un;
-      if (b && typeof b === 'object') { id = b.id; rows = lim(b.rows, 1, 16, DEF.rows); on = lim(b.on, 0, 8, DEF.on); un = lim(b.un, 0, 10, DEF.un); }
+      var b = bl[i], id, rows = DEF.rows, on = DEF.on, un = DEF.un, hc = 'BCE';
+      if (b && typeof b === 'object') { id = b.id; rows = lim(b.rows, 1, 16, DEF.rows); on = lim(b.on, 0, 8, DEF.on); un = lim(b.un, 0, 10, DEF.un); hc = hcStr(String(b.hc || '')) || 'BCE'; }
       else id = b;
       id = String(id).replace(/[^A-Za-z0-9]/g, '').slice(0, 8);
-      if (id && ids.indexOf(id) < 0) { ids.push(id); sh.bays.push({ id: id, rows: rows, on: on, un: un }); }
+      if (id && ids.indexOf(id) < 0) { ids.push(id); sh.bays.push({ id: id, rows: rows, on: on, un: un, hc: hc }); }
     }
     var re = /^[A-Za-z0-9]{1,8}\|\d\d\|\d\d$/, im = x.imp || {}, dn = x.done || {}, ex = x.exp || {};
     for (k in im) { if (re.test(k) && ids.indexOf(k.split('|')[0]) >= 0 && typeof im[k] === 'string') sh.imp[k] = im[k].slice(0, 4); }
@@ -108,13 +114,19 @@
     var cu = Array.isArray(x.cuts) ? x.cuts : [];
     for (i = 0; i < cu.length && sh.cuts.length < 500; i++) {
       q = cu[i];
-      if (q && isFinite(q.from) && isFinite(q.to) && q.from > 0 && q.to > 0) sh.cuts.push({ from: +q.from, to: +q.to, d: lim(q.d, 0, 99999, 0), c: lim(q.c, 0, 99999, 0) });
+      if (q && isFinite(q.from) && isFinite(q.to) && q.from > 0 && q.to > 0) sh.cuts.push({ from: +q.from, to: +q.to, d: lim(q.d, 0, 99999, 0), c: lim(q.c, 0, 99999, 0), h: lim(q.h, 0, 99999, 0), e: lim(q.e, 0, 99999, 0) });
     }
     var hl = Array.isArray(x.hat) ? x.hat : [], hq;
     for (i = 0; i < hl.length && sh.hat.length < 2000; i++) {
       hq = hl[i];
       if (!hq || typeof hq !== 'object') continue;
-      sh.hat.push({ b: (hq && typeof hq.b === 'string') ? hq.b.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) : '' });
+      sh.hat.push({ b: (typeof hq.b === 'string') ? hq.b.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) : '', p: (typeof hq.p === 'string' && hq.p.length === 1 && 'BCE'.indexOf(hq.p) >= 0) ? hq.p : '', t: (typeof hq.t === 'number' && isFinite(hq.t) && hq.t > 0) ? hq.t : 0 });
+    }
+    var el2 = Array.isArray(x.esp) ? x.esp : [];
+    for (i = 0; i < el2.length && sh.esp.length < 2000; i++) {
+      hq = el2[i];
+      if (!hq || typeof hq !== 'object') continue;
+      sh.esp.push({ b: (typeof hq.b === 'string') ? hq.b.replace(/[^A-Za-z0-9]/g, '').slice(0, 8) : '', t: (typeof hq.t === 'number' && isFinite(hq.t) && hq.t > 0) ? hq.t : 0 });
     }
     var mm = [['mk', x.mk, sh.imp], ['mx', x.mx, sh.exp]], z, src, tg, mo, mq;
     for (z = 0; z < 2; z++) {
@@ -258,46 +270,95 @@
     modal(editC ? 'Elegir código para editar' : 'Buscar código', '<input type="text" id="qs" maxlength="4" placeholder="Escribe el código"><div class="pickgrid" id="pg">' + findList('') + '</div>', [{ t: 'Cerrar' }]);
     setTimeout(function () { var a = document.activeElement; if (a && a.blur) a.blur(); }, 150);
   }
+  function evAfter(a, from, to) {
+    var n = 0, i;
+    a = a || [];
+    for (i = 0; i < a.length; i++) { if (a[i].t > from && (!to || a[i].t <= to)) n++; }
+    return n;
+  }
   function hatBtn() {
     return '<button type="button" class="tapb" data-act="tap">Tapaderas <b>' + ((SH().hat || []).length) + '</b><span>+1</span></button>';
   }
-  function hatAdd() {
+  function espBtn() {
+    return '<button type="button" class="tapb" data-act="esp">Esperas <b>' + ((SH().esp || []).length) + '</b><span>+1</span></button>';
+  }
+  function hatModal() {
+    var cfg = bcfg(bay), hc = cfg ? (hcStr(cfg.hc || '') || 'BCE') : 'BCE', h = SH().hat || [], n = {}, i, g = '';
+    for (i = 0; i < h.length; i++) { if ((h[i].b || '') === (bay || '')) n[h[i].p] = (n[h[i].p] || 0) + 1; }
+    for (i = 0; i < hc.length; i++) {
+      g += '<button type="button" class="hbtn" data-hp="' + hc.charAt(i) + '"><b>' + HN[hc.charAt(i)] + '</b><span>' + (n[hc.charAt(i)] || 0) + ' en esta bahía</span></button>';
+    }
+    modal('Tapadera - bahía ' + (bay || 'sin bahía'), '<div class="hgrid" style="grid-template-columns:repeat(' + hc.length + ',1fr)">' + g + '</div>', [{ t: 'Cancelar' }]);
+  }
+  function hatAdd(p) {
     var sh = SH();
     if (!sh.hat) sh.hat = [];
-    sh.hat.push({ b: bay || '' });
+    sh.hat.push({ b: bay || '', p: p || '', t: Date.now() });
     if (sh.hat.length > 2000) sh.hat.shift();
     save(); vib('exito'); render();
-    toast('Tapadera registrada: ' + sh.hat.length + (bay ? ' (bahía ' + bay + ')' : ''));
+    toast('Tapadera ' + (p ? HN[p].toLowerCase() + ' ' : '') + 'registrada: ' + sh.hat.length + (bay ? ' (bahía ' + bay + ')' : ''));
   }
   function hatUndo() {
     var sh = SH();
     if (!sh.hat || !sh.hat.length) { toast('No hay movimientos de tapaderas'); return; }
     sure('Quitar último movimiento', 'Se quita el último movimiento de tapadera registrado.', 'Quitar', function () { sh.hat.pop(); save(); render(); });
   }
+  function espAdd() {
+    var sh = SH();
+    if (!sh.esp) sh.esp = [];
+    sh.esp.push({ b: bay || '', t: Date.now() });
+    if (sh.esp.length > 2000) sh.esp.shift();
+    save(); vib('exito'); render();
+    toast('Espera registrada: ' + sh.esp.length + (bay ? ' (bahía ' + bay + ')' : ''));
+  }
+  function espUndo() {
+    var sh = SH();
+    if (!sh.esp || !sh.esp.length) { toast('No hay esperas registradas'); return; }
+    sure('Quitar última espera', 'Se quita la última espera registrada.', 'Quitar', function () { sh.esp.pop(); save(); render(); });
+  }
   function hatTable() {
-    var h = SH().hat || [], by = {}, ks = [], i, t;
+    var h = SH().hat || [], by = {}, ks = [], i, t, e, r;
+    if (!h.length) return '';
+    for (i = 0; i < h.length; i++) {
+      t = h[i].b || '-';
+      if (!by[t]) { by[t] = { B: 0, C: 0, E: 0, n: 0 }; ks.push(t); }
+      by[t].n++;
+      if (h[i].p) by[t][h[i].p]++;
+    }
+    t = '<table class="t2"><tr><th>Bahía</th><th>Babor</th><th>Centro</th><th>Estribor</th><th>Total</th></tr>';
+    for (i = 0; i < ks.length; i++) {
+      r = by[ks[i]];
+      t += '<tr><td>' + esc(ks[i] === '-' ? 'Sin bahía' : ks[i]) + '</td><td>' + r.B + '</td><td>' + r.C + '</td><td>' + r.E + '</td><td><b>' + r.n + '</b></td></tr>';
+    }
+    return t + '</table>';
+  }
+  function espTable() {
+    var h = SH().esp || [], by = {}, ks = [], i, t;
     if (!h.length) return '';
     for (i = 0; i < h.length; i++) { t = h[i].b || '-'; if (!by[t]) { by[t] = 0; ks.push(t); } by[t]++; }
-    t = '<table class="t2"><tr><th>Bahía</th><th>Movimientos</th></tr>';
+    t = '<table class="t2"><tr><th>Bahía</th><th>Esperas</th></tr>';
     for (i = 0; i < ks.length; i++) t += '<tr><td>' + esc(ks[i] === '-' ? 'Sin bahía' : ks[i]) + '</td><td>' + by[ks[i]] + '</td></tr>';
     return t + '</table>';
   }
   function hatCard() {
-    var n = (SH().hat || []).length, t = hatTable();
-    return '<div class="card"><h4>Tapaderas</h4><div class="big"><div><b>' + n + '</b>Movimientos</div></div>' + t +
-      '<button type="button" class="btn pri blk" data-act="tap">Registrar movimiento (+1)</button>' +
+    var n = (SH().hat || []).length, m = (SH().esp || []).length;
+    return '<div class="card"><h4>Tapaderas</h4><div class="big"><div><b>' + n + '</b>Movimientos</div></div>' + hatTable() +
+      '<button type="button" class="btn pri blk" data-act="tap">Registrar movimiento de tapadera</button>' +
       (n ? '<button type="button" class="btn blk" data-act="untap">Quitar el último</button>' : '') +
-      '<p class="hint">Se anota en la bahía que tengas seleccionada. Si ya se hizo, también puedes registrarlo después.</p></div>';
+      '<p class="hint">Se anota en la bahía seleccionada. Si ya se hizo, también puedes registrarlo después.</p></div>' +
+      '<div class="card"><h4>Esperas (cajas de twistlocks)</h4><div class="big"><div><b>' + m + '</b>Movimientos</div></div>' + espTable() +
+      '<button type="button" class="btn pri blk" data-act="esp">Registrar espera (+1)</button>' +
+      (m ? '<button type="button" class="btn blk" data-act="unesp">Quitar la última</button>' : '') + '</div>';
   }
   function pdfHat() {
-    var n = (SH().hat || []).length;
-    return n ? '<h3>Tapaderas</h3><p>Movimientos de tapaderas: <b>' + n + '</b></p>' + pdfT(hatTable()) : '';
+    var n = (SH().hat || []).length, m = (SH().esp || []).length;
+    return (n ? '<h3>Tapaderas</h3><p>Movimientos de tapaderas: <b>' + n + '</b></p>' + pdfT(hatTable()) : '') + (m ? '<h3>Esperas (cajas de twistlocks)</h3><p>Total: <b>' + m + '</b></p>' + pdfT(espTable()) : '');
   }
   function renderTools() {
     var h = '', c = count(bay || null);
     if (tab === 'cap') h = '<p class="step">Paso 1: captura el plano</p>' + palette(true);
-    else if (tab === 'des') h = '<div class="stepbar"><p class="step">Paso 2: descarga - pendientes: <b>' + (c.p - c.d) + '</b></p>' + hatBtn() + '</div>';
-    else h = '<div class="stepbar"><p class="step">Paso 3: carga</p>' + hatBtn() + '</div>' + palette(false);
+    else if (tab === 'des') h = '<p class="step">Paso 2: descarga - pendientes: <b>' + (c.p - c.d) + '</b></p><div class="hbar">' + hatBtn() + espBtn() + '</div>';
+    else h = '<p class="step">Paso 3: carga</p><div class="hbar">' + hatBtn() + espBtn() + '</div>' + palette(false);
     $('tools').innerHTML = h;
   }
   function tagHtml(M, k) {
@@ -347,7 +408,7 @@
   function renderRes() {
     var t = count(null), h = '';
     h += '<div class="card"><h4>Totales - ' + esc(SH().name) + '</h4><div class="big"><div><b>' + t.p + '</b>Plan</div><div><b>' + t.d + '</b>Descargados</div><div><b>' + (t.p - t.d) + '</b>Pendientes</div><div><b>' + t.l + '</b>Cargados</div></div>';
-    h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b>' + (t.na ? ' - Contenedores N/A (no se mueven): <b>' + t.na + '</b>' : '') + ((SH().hat || []).length ? ' - Tapaderas: <b>' + SH().hat.length + '</b>' : '') + '</p></div>';
+    h += '<p class="hint">Movimientos totales: <b>' + (t.d + t.l) + '</b>' + (t.na ? ' - Contenedores N/A (no se mueven): <b>' + t.na + '</b>' : '') + ((SH().hat || []).length ? ' - Tapaderas: <b>' + SH().hat.length + '</b>' : '') + ((SH().esp || []).length ? ' - Esperas: <b>' + SH().esp.length + '</b>' : '') + '</p></div>';
     h += cutsCard() + hatCard() + marksCard();
     h += '<div class="card"><h4>Por bahía</h4>' + tabla() + '</div>';
     h += '<div class="card"><h4>Archivos</h4><button type="button" class="btn pri blk" data-act="pdf">Compartir resumen en PDF</button>' +
@@ -369,43 +430,48 @@
     var x = new Date(a), y = new Date(b);
     return hhd(a) + ' - ' + (x.toDateString() === y.toDateString() ? hh(b) : hhd(b));
   }
+  function cutN(u) { return u.d + u.c + (u.h || 0) + (u.e || 0); }
   function sinceCut() {
-    var sh = SH(), cs = sh.cuts || [], l = sh.log || [], n = 0, i, t;
-    if (!cs.length) { t = count(null); return t.d + t.l; }
-    for (i = 0; i < l.length; i++) { if (l[i].t > cs[cs.length - 1].to) n++; }
-    return n;
+    var sh = SH(), cs = sh.cuts || [], l = sh.log || [], n = 0, i, t, from = 0;
+    if (!cs.length) { t = count(null); n = t.d + t.l; }
+    else { from = cs[cs.length - 1].to; for (i = 0; i < l.length; i++) { if (l[i].t > from) n++; } }
+    return n + evAfter(sh.hat, from) + evAfter(sh.esp, from);
   }
   function cutNow() {
-    var sh = SH(), l = sh.log || [], now = Date.now(), d = 0, c = 0, i, from, t, cs;
+    var sh = SH(), l = sh.log || [], now = Date.now(), d = 0, c = 0, h, e, i, from, t, cs, a, k;
     if (!sh.cuts) sh.cuts = [];
     cs = sh.cuts;
     if (cs.length) {
       from = cs[cs.length - 1].to;
       for (i = 0; i < l.length; i++) { if (l[i].t > from && l[i].t <= now) { if (l[i].a === 'D') d++; else c++; } }
+      h = evAfter(sh.hat, from, now); e = evAfter(sh.esp, from, now);
     } else {
       t = count(null); d = t.d; c = t.l;
       from = now;
       for (i = 0; i < l.length; i++) { if (l[i].t < from) from = l[i].t; }
+      h = evAfter(sh.hat, 0, now); e = evAfter(sh.esp, 0, now);
+      a = (sh.hat || []).concat(sh.esp || []);
+      for (k = 0; k < a.length; k++) { if (a[k].t > 0 && a[k].t < from) from = a[k].t; }
     }
-    if (d + c === 0) { toast(cs.length ? 'Sin movimientos desde el último corte' : 'Aún no hay movimientos'); vib('aviso'); return; }
-    cs.push({ from: from, to: now, d: d, c: c });
+    if (d + c + h + e === 0) { toast(cs.length ? 'Sin movimientos desde el último corte' : 'Aún no hay movimientos'); vib('aviso'); return; }
+    cs.push({ from: from, to: now, d: d, c: c, h: h, e: e });
     if (cs.length > 500) cs.splice(0, cs.length - 500);
     save(); vib('exito'); render();
-    toast('Corte: ' + (d + c) + ' movimientos (' + period(from, now) + ')');
+    toast('Corte: ' + (d + c + h + e) + ' movimientos (' + period(from, now) + ')');
   }
   function cutsTable() {
-    var cs = SH().cuts || [], h = '<table class="t2"><tr><th>#</th><th>Periodo</th><th>Mov.</th><th>Desc.</th><th>Carg.</th></tr>', i, tot = 0;
+    var cs = SH().cuts || [], h = '<table class="t2"><tr><th>#</th><th>Periodo</th><th>Mov.</th><th>Desc.</th><th>Carg.</th><th>Tapa.</th><th>Esp.</th></tr>', i, tot = 0;
     for (i = 0; i < cs.length; i++) {
-      h += '<tr><td>' + (i + 1) + '</td><td>' + period(cs[i].from, cs[i].to) + '</td><td><b>' + (cs[i].d + cs[i].c) + '</b></td><td>' + cs[i].d + '</td><td>' + cs[i].c + '</td></tr>';
-      tot += cs[i].d + cs[i].c;
+      h += '<tr><td>' + (i + 1) + '</td><td>' + period(cs[i].from, cs[i].to) + '</td><td><b>' + cutN(cs[i]) + '</b></td><td>' + cs[i].d + '</td><td>' + cs[i].c + '</td><td>' + (cs[i].h || 0) + '</td><td>' + (cs[i].e || 0) + '</td></tr>';
+      tot += cutN(cs[i]);
     }
-    return h + '<tr><td></td><td>Total</td><td><b>' + tot + '</b></td><td></td><td></td></tr></table>';
+    return h + '<tr><td></td><td>Total</td><td><b>' + tot + '</b></td><td></td><td></td><td></td><td></td></tr></table>';
   }
   function cutsCard() {
     var cs = SH().cuts || [], h = '<div class="card"><h4>Cortes de hora</h4>', i;
     if (!cs.length) return h + '<p class="hint">Aún no hay cortes. Toca el botón Corte de arriba al terminar cada periodo.</p></div>';
     h += '<div class="seq">';
-    for (i = 0; i < cs.length; i++) h += '<span>' + (cs[i].d + cs[i].c) + '</span>';
+    for (i = 0; i < cs.length; i++) h += '<span>' + cutN(cs[i]) + '</span>';
     return h + '</div>' + cutsTable() + '<button type="button" class="btn blk" data-act="uncut">Eliminar último corte</button></div>';
   }
   function hh(t) { var d = new Date(t); return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
@@ -528,7 +594,7 @@
       if (!v) { toast('Escribe un número de bahía'); return false; }
       if (bcfg(v)) { toast('Esa bahía ya existe'); return false; }
       var base = bcfg(bay) || DEF;
-      SH().bays.push({ id: v, rows: base.rows, on: base.on, un: base.un });
+      SH().bays.push({ id: v, rows: base.rows, on: base.on, un: base.un, hc: hcStr(base.hc || '') || 'BCE' });
       sortBays(); bay = v; save(); render();
     });
   }
@@ -552,20 +618,21 @@
       ok = validKeys(v, ids[i]);
       for (k in sh.imp) { if (k.indexOf(ids[i] + '|') === 0 && !ok[k]) { delete sh.imp[k]; delete sh.done[k]; } }
       for (k in sh.exp) { if (k.indexOf(ids[i] + '|') === 0 && !ok[k]) delete sh.exp[k]; }
-      c = bcfg(ids[i]); c.rows = v.rows; c.on = v.on; c.un = v.un;
+      c = bcfg(ids[i]); c.rows = v.rows; c.on = v.on; c.un = v.un; c.hc = hcStr(v.hc || '') || 'BCE';
     }
     save(); render();
   }
   function editCells() {
     var c = bcfg(bay);
     if (!c) return;
-    var v = { rows: c.rows, on: c.on, un: c.un, all: false };
+    var v = { rows: c.rows, on: c.on, un: c.un, hc: hcStr(c.hc || '') || 'BCE', all: false };
     function line(lbl, key) {
       return '<div class="stp"><span>' + lbl + '</span><span><button type="button" data-step="' + key + ',-1">-</button><b id="sv_' + key + '">' + v[key] + '</b><button type="button" data-step="' + key + ',1">+</button></span></div>';
     }
     modal('Celdas de la bahía ' + bay,
       '<p>Filas: si el número es impar incluye la 00 (13 = 12 a 02, 00, 01 a 11; 14 = 14 a 02, 01 a 13). Pisos: sobre cubierta desde 82, bajo cubierta desde 02.</p>' +
       line('Filas', 'rows') + line('Pisos sobre cubierta', 'on') + line('Pisos bajo cubierta', 'un') +
+      '<div class="lbl">Tapaderas de esta bahía</div><div class="tgs">' + ['B', 'C', 'E'].map(function (q) { return '<button type="button" class="tgb' + (v.hc.indexOf(q) >= 0 ? ' on' : '') + '" data-hc="' + q + '">' + HN[q] + '</button>'; }).join('') + '</div>' +
       '<div class="row"><span>Aplicar a todas las bahías</span><button type="button" class="sw" data-stepall="1"></button></div>', [
         { t: 'Cancelar' },
         { t: 'Guardar', cls: 'pri', fn: function () {
@@ -713,7 +780,7 @@
       for (k in sh.imp) { if (sh.imp[k] === NA || !sh.done[k]) { ni[k] = sh.imp[k]; if (sh.mk[k]) nm[k] = sh.mk[k]; } }
       for (k in sh.exp) { ni[k] = sh.exp[k]; if (sh.mx[k]) nm[k] = sh.mx[k]; else delete nm[k]; }
     }
-    sh.imp = ni; sh.mk = nm; sh.done = {}; sh.exp = {}; sh.mx = {}; sh.log = []; sh.cuts = []; sh.hat = [];
+    sh.imp = ni; sh.mk = nm; sh.done = {}; sh.exp = {}; sh.mx = {}; sh.log = []; sh.cuts = []; sh.hat = []; sh.esp = [];
     n = 0; for (k in ni) { if (ni[k] !== NA) n++; }
     tab = 'cap'; save(); render();
     toast(w === 'keep' ? 'Plano nuevo: ' + n + ' contenedores a bordo' : 'Buque listo para una operación nueva');
@@ -789,12 +856,14 @@
   }
   function act(a) {
     if (a === 'cut') cutNow();
-    else if (a === 'tap') hatAdd();
+    else if (a === 'tap') hatModal();
     else if (a === 'untap') hatUndo();
+    else if (a === 'esp') espAdd();
+    else if (a === 'unesp') espUndo();
     else if (a === 'uncut') {
       var cs = SH().cuts || [], u = cs[cs.length - 1];
       if (!u) return;
-      sure('Eliminar último corte', 'Se elimina el corte ' + period(u.from, u.to) + ' (' + (u.d + u.c) + ' movimientos).', 'Eliminar', function () { cs.pop(); save(); render(); });
+      sure('Eliminar último corte', 'Se elimina el corte ' + period(u.from, u.to) + ' (' + cutN(u) + ' movimientos).', 'Eliminar', function () { cs.pop(); save(); render(); });
     } else if (a === 'pdf') pdf();
     else if (a === 'bak') backup();
     else if (a === 'res') $('file').click();
@@ -1004,6 +1073,12 @@
         closeModal();
         if (editC) codeModal(pc); else { sel = pc; render(); }
         return;
+      }
+      if ((el = up(e.target, 'data-hp'))) { var hp = el.getAttribute('data-hp'); closeModal(); hatAdd(hp); return; }
+      if ((el = up(e.target, 'data-hc')) && m._v) {
+        var hq2 = el.getAttribute('data-hc'), on3 = m._v.hc.indexOf(hq2) < 0, nv = on3 ? hcStr(m._v.hc + hq2) : m._v.hc.replace(hq2, '');
+        if (!nv) { toast('Debe quedar al menos una tapadera'); return; }
+        m._v.hc = nv; el.className = 'tgb' + (on3 ? ' on' : ''); return;
       }
       if ((el = up(e.target, 'data-dep'))) {
         var w = el.getAttribute('data-dep');

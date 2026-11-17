@@ -117,3 +117,9 @@ input.hue{background:linear-gradient(to right,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00
 .sact{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .sact .mini{padding:11px 8px;text-align:center;font-size:14px}
 .sact .dng{grid-column:1/-1;border-color:#b3261e;color:#ff8a80}
+.hbar{display:flex;gap:8px;margin:2px 0 8px}
+.hbar .tapb{flex:1;justify-content:center}
+.hgrid{display:grid;gap:8px;margin-top:4px}
+.hbtn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px 4px;border-radius:14px;border:1px solid var(--ac);background:var(--sf2);color:var(--tx)}
+.hbtn b{font-size:16px}
+.hbtn span{font-size:11px;color:var(--mu)}
